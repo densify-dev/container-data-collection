@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: densify-job
+spec:
+  schedule: "5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: data-forwarder
+            image: densify/container-optimization-data-forwarder:4-beta
+            imagePullPolicy: Always
+            env:
+            - name: CONFIG_TYPE
+              value: "yaml"
+            volumeMounts:
+            - mountPath: /config
+              name: config
+          volumes:
+          - name: config
+            configMap:
+              name: densifyconf
+              items:
+                - key: config.yaml
+                  path: config.yaml
+          restartPolicy: Never

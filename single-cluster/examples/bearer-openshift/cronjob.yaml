@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: densify-job
+spec:
+  schedule: "5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          serviceAccountName: densify
+          containers:
+          - image: densify/container-optimization-data-forwarder:4-beta
+            imagePullPolicy: Always
+            name: data-forwarder
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+            volumeMounts:
+            - mountPath: /config
+              name: config
+          volumes:
+          - name: config
+            configMap:
+              name: densifyconf
+              items:
+                - key: config.properties
+                  path: config.properties
+          restartPolicy: Never

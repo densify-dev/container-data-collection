@@ -1,0 +1,80 @@
+apiVersion :  v1
+kind :  ConfigMap
+metadata :
+  name :  densifyconf 
+data : 
+  config.properties : |
+    ###################################################################
+    # Densify Forwarder section
+    ###################################################################
+
+    host <instance>.densify.com
+    protocol https
+    port 443
+    endpoint /CIRBA/api/v2/
+
+    user <Densify user>
+    # password <password, or:>,
+    # epassword <encrypted password>
+
+    # will prepend this prefix in transferred zip files names
+    prefix <zip file prefix>
+
+    ###################################################################
+    # Optional - Proxy section
+    # These setting are only applicable if <proxyhost> is defined
+    ###################################################################
+
+    # proxyhost <proxy.company.com>
+    # proxyport <proxy port, default: 443>
+    # proxyprotocol <http|https (default)>
+    # proxyauth <Basic (default)|NTLM>
+
+    # proxyuser <username>
+    # proxypassword <password, or:>
+    # eproxypassword <encrypted password>
+
+    # The following settings are used for NTLM authentication:
+    # proxyserver <server name>
+    # proxydomain <domain>
+
+    ###################################################################
+    # Prometheus section
+    ###################################################################
+
+    prometheus_address <Prometheus hostname, in-cluster it's recommended to use the internal service name (i.e. service_name.namespace)>
+    prometheus_port <Prometheus port, default: 9090>
+    # prometheus_protocol <http (default)|https>
+    # prometheus_user <Prometheus basic auth username, or name of file containing this info>
+    # prometheus_password <Prometheus basic auth password, or name of file containing this info>
+
+    # Bearer token can be used for a number of solutions supporting Prometheus-API.
+    # It is required by OpenShift Monitoring (which deploys Prometheus itself), see:
+    # https://access.redhat.com/documentation/en-us/openshift_container_platform/4.14/html/monitoring/accessing-third-party-monitoring-apis
+    # It's also required by Azure Monitor managed Prometheus - see:
+    # https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql
+    # The value of this parameter may be either the token itself or a name of file containing it.
+    # Example (using k8s service account token):
+
+    # prometheus_oauth_token /var/run/secrets/kubernetes.io/serviceaccount/token
+    # ca_certificate /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+
+    ###################################################################
+    # Collection section
+    ###################################################################
+
+    # cluster_name <optional parameter to specify the cluster name; if not specified will use the prometheus_address value>
+    # interval <days|hours (default)|minutes>
+    # interval_size 1
+    # history 1
+    # offset is the amount of units (based on interval value) to offset the data collection backwards in time
+    # offset 0
+    # sample_rate 5
+    # include_list container,node,cluster,nodegroup,quota
+    # node_group_list label_cloud_google_com_gke_nodepool,label_eks_amazonaws_com_nodegroup,label_agentpool,label_pool_name,label_alpha_eksctl_io_nodegroup_name,label_kops_k8s_io_instancegroup
+
+    ###################################################################
+    # Miscellaneous
+    ###################################################################
+
+    # debug <true|false>
