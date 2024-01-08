@@ -190,7 +190,7 @@ const (
 	rightBracket       = ")"
 	Comma              = cconf.Comma
 	Dot                = cconf.Dot
-	Slash              = "/"
+	Slash              = cconf.Slash
 	Space              = " "
 	Underscore         = "_"
 	cr                 = "\r"
