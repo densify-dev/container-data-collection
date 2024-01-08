@@ -11,14 +11,14 @@ data :
     host <instance>.densify.com
     protocol https
     port 443
-    endpoint /CIRBA/api/v2/
+    endpoint /api/v2/
 
     user <Densify user>
     # password <password, or:>,
     # epassword <encrypted password>
 
     # will prepend this prefix in transferred zip files names
-    prefix <zip file prefix>
+    # prefix <zip file prefix>
 
     ###################################################################
     # Optional - Proxy section
@@ -63,7 +63,7 @@ data :
     # Collection section
     ###################################################################
 
-    # cluster_name <optional parameter to specify the cluster name; if not specified will use the prometheus_address value>
+    cluster_name <cluster name>
     # interval <days|hours (default)|minutes>
     # interval_size 1
     # history 1

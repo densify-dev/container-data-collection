@@ -3,7 +3,7 @@ module github.com/densify-dev/container-data-collection
 go 1.21
 
 require (
-	github.com/densify-dev/container-config v1.0.1
+	github.com/densify-dev/container-config v1.0.2
 	github.com/iancoleman/strcase v0.3.0
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/common v0.45.0
