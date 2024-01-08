@@ -3,7 +3,7 @@ module github.com/densify-dev/container-data-collection
 go 1.21
 
 require (
-	github.com/densify-dev/container-config v1.0.2
+	github.com/densify-dev/container-config v1.0.3
 	github.com/iancoleman/strcase v0.3.0
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/common v0.45.0
@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.49.16 // indirect
+	github.com/aws/aws-sdk-go v1.49.17 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
@@ -42,8 +42,8 @@ require (
 	github.com/spf13/viper v1.18.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.19.0 // indirect
-	golang.org/x/oauth2 v0.15.0 // indirect
+	golang.org/x/net v0.20.0 // indirect
+	golang.org/x/oauth2 v0.16.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect

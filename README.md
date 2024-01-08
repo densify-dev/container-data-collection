@@ -52,13 +52,14 @@ In this configuration, data is collected from the Kubernetes cluster where your 
 
 ### [Multiple Kubernetes Clusters](multi-cluster)
 
-In this configuration, data is collected from multiple Kubernetes clusters monitored by an observability platform. The Densify Forwarder can run anywhere (provided it can access that observaibility platform).
+In this configuration, data is collected from multiple Kubernetes clusters monitored by an observability platform. The Densify Forwarder can run anywhere (provided it can access that observability platform).
 
 #### [Config](multi-cluster/config/README.md)
 
 #### Examples
 
 * [Kubernetes with observability platform using basic authentication](multi-cluster/examples/basic)
+* [Kubernetes with Amazon Managed Prometheus (AMP)](multi-cluster/examples/amp)
 
 ## [Documentation](docs)
 

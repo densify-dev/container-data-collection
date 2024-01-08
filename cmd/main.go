@@ -27,8 +27,13 @@ func main() {
 	common.InitLogs()
 	common.LogAll(1, common.Info, "Container data collection version %s", common.Version)
 	var ver string
-	if ver, err = common.GetVersion(); err == nil {
-		common.LogAll(1, common.Info, "Detected Prometheus version %s", ver)
+	var verFound bool
+	if verFound, ver, err = common.GetVersion(); err == nil {
+		var prefix string
+		if verFound {
+			prefix = "Detected "
+		}
+		common.LogAll(1, common.Info, "%sPrometheus version %s", prefix, ver)
 	} else {
 		common.FatalError(err, "Failed to connect to Prometheus:")
 	}

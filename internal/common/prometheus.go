@@ -54,7 +54,14 @@ func CollectMetric(callDepth int, query string, promRange v1.Range) (crm Cluster
 	return
 }
 
-func GetVersion() (version string, err error) {
+func GetVersion() (found bool, version string, err error) {
+	if Params.Prometheus.SigV4Config != nil {
+		// cannot call Buildinfo() for two reasons:
+		// 1. it's a GET request with nil body and SigV4 requires request body to sign;
+		// 2. AMP doesn't support this API (returns 404)
+		version = verAMP
+		return
+	}
 	var pa v1.API
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = time.AfterFunc(1*time.Minute, func() { cancel() })
@@ -64,11 +71,13 @@ func GetVersion() (version string, err error) {
 	var bir v1.BuildinfoResult
 	if bir, err = pa.Buildinfo(ctx); err == nil {
 		version = bir.Version
+		found = true
 	}
 	return
 }
 
 const (
+	verAMP      = "cannot be detected for AMP workspaces"
 	promClient  = "prometheus-client"
 	labelPrefix = Label + Underscore
 )

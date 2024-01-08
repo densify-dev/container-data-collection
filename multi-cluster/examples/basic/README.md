@@ -1,4 +1,4 @@
-This example shows you how to setup the Data Forwarder to connect to an observability platform and send container data to Densify on an hourly basis. You need to edit the configmap.yaml file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
+This example shows you how to setup the Data Forwarder to connect to an observability platform supporting Prometheus API with HTTP basic authentication (e.g. Grafana Cloud), and send container data to Densify on an hourly basis. You need to edit the configmap.yaml file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
 
 1. Modify the configmap.yaml to point to your Densify instance and to the observability platform.
 
