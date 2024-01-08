@@ -58,7 +58,7 @@ In this configuration, data is collected from multiple Kubernetes clusters monit
 
 #### Examples
 
-* [Kubernetes with observability platfrom using basic authentication](multi-cluster/examples/basic)
+* [Kubernetes with observability platform using basic authentication](multi-cluster/examples/basic)
 
 ## [Documentation](docs)
 
