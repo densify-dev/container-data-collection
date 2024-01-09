@@ -47,7 +47,7 @@ data :
         sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
             region: <AWS region, mandatory>
     #       # if running on AWS / EKS, all other sigv4 attributes can be left empty and be retrieved using the AWS default credentials chain, IAM roles and service account
-    #         (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-ingest-metrics.html#AMP-quick-new-Prometheus-IRSA)
+    #         (see https://docs.aws.amazon.com/prometheus/latest/userguide/set-up-irsa.html#set-up-irsa-query)
     #        access_key: <AWS access key>
     #        secret_key: <AWS secret key>
     #        profile: <AWS profile>
