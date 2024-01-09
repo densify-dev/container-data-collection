@@ -43,7 +43,7 @@ data :
     #    ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
     #    sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
     #        region: <AWS region, mandatory>
-    #       # if running on AWS / EKS, all other attributes can be left empty and be retrieved using the AWS default credentials chain, IAM roles and service account
+    #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
     #         (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-ingest-metrics.html#AMP-quick-new-Prometheus-IRSA)
     #        access_key: <AWS access key>
     #        secret_key: <AWS secret key>

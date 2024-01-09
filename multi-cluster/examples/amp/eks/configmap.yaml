@@ -46,7 +46,7 @@ data :
     #    ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
         sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
             region: <AWS region, mandatory>
-    #       # if running on AWS / EKS under appropriate service aqccount, all other sigv4 attributes can be left empty
+    #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
     # the entire retry section is optional, if omitted then the default values below are used
     #    retry:
     #        wait_min: 1 # in seconds
