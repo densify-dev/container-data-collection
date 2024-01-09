@@ -3,7 +3,7 @@ kind :  ConfigMap
 metadata :
   name :  densifyconf 
 data : 
-  config.properties : |
+  config.yaml : |
     forwarder:
         densify:
             url:
