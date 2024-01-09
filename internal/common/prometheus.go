@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,19 +32,20 @@ func CollectMetric(callDepth int, query string, promRange v1.Range) (crm Cluster
 				LogCluster(callDepth+1, Debug, clusterQueryLogFormat, cluster, true, cluster, q)
 			}
 			var pa v1.API
-			if pa, err = promApi(cluster); err != nil {
-				return
+			if pa, err = promApi(cluster); err == nil {
+				ctx, cancel := context.WithCancel(context.Background())
+				_ = time.AfterFunc(2*time.Minute, func() { cancel() })
+				var value model.Value
+				var e error
+				value, _, e = pa.QueryRange(ctx, q, promRange)
+				failOnConnectionError(e)
+				m := qlf.filterValue(cluster, q, value, e)
+				if crm, err = Merge(crm, m, Fail); err != nil {
+					break
+				}
+			} else {
+				failOnConnectionError(err)
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			_ = time.AfterFunc(2*time.Minute, func() { cancel() })
-			var value model.Value
-			var e error
-			value, _, e = pa.QueryRange(ctx, q, promRange)
-			m := qlf.filterValue(cluster, q, value, e)
-			if crm, err = Merge(crm, m, Fail); err != nil {
-				break
-			}
-
 		}
 	}
 	for _, result := range crm {
@@ -55,31 +57,54 @@ func CollectMetric(callDepth int, query string, promRange v1.Range) (crm Cluster
 }
 
 func GetVersion() (found bool, version string, err error) {
-	if Params.Prometheus.SigV4Config != nil {
-		// cannot call Buildinfo() for two reasons:
-		// 1. it's a GET request with nil body and SigV4 requires request body to sign;
-		// 2. AMP doesn't support this API (returns 404)
-		version = verAMP
+	if supported, forWhat := buildInfoSupported(); !supported {
+		version = fmt.Sprintf(verNotDetected, forWhat)
 		return
 	}
 	var pa v1.API
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = time.AfterFunc(1*time.Minute, func() { cancel() })
-	if pa, err = promApi(Empty); err != nil {
-		return
+	if pa, err = promApi(Empty); err == nil {
+		var bir v1.BuildinfoResult
+		if bir, err = pa.Buildinfo(ctx); err == nil {
+			version = bir.Version
+			found = true
+		}
 	}
-	var bir v1.BuildinfoResult
-	if bir, err = pa.Buildinfo(ctx); err == nil {
-		version = bir.Version
-		found = true
-	}
+	failOnConnectionError(err)
 	return
 }
 
+var once sync.Once
+
+func failOnConnectionError(err error) {
+	// if the very first attempt to connect to Prometheus fails, bail out as most probably
+	// the configuration is wrong
+	once.Do(func() {
+		if err != nil {
+			FatalError(err, "Failed to connect to Prometheus:")
+		}
+	})
+}
+
+func buildInfoSupported() (bool, string) {
+	if Params.Prometheus.SigV4Config != nil ||
+		strings.HasPrefix(strings.ToLower(Params.Prometheus.UrlConfig.Host), workspaceAMPPattern) {
+		// cannot call Buildinfo() for two reasons:
+		// 1. It's a GET request with nil body and SigV4 requires request body to sign,
+		//    see https://github.com/prometheus/common/issues/562
+		// 2. AMP doesn't support this API anyway (returns 404)
+		return false, workspaceAMP
+	}
+	return true, Empty
+}
+
 const (
-	verAMP      = "cannot be detected for AMP workspaces"
-	promClient  = "prometheus-client"
-	labelPrefix = Label + Underscore
+	verNotDetected      = "cannot be detected for %s"
+	workspaceAMP        = "AMP workspaces"
+	workspaceAMPPattern = "aps-workspaces"
+	promClient          = "prometheus-client"
+	labelPrefix         = Label + Underscore
 )
 
 func promApi(cluster string) (v1.API, error) {

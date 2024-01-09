@@ -34,8 +34,6 @@ func main() {
 			prefix = "Detected "
 		}
 		common.LogAll(1, common.Info, "%sPrometheus version %s", prefix, ver)
-	} else {
-		common.FatalError(err, "Failed to connect to Prometheus:")
 	}
 	if includes(common.ContainerEntityKind) {
 		container.Metrics()
