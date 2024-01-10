@@ -93,7 +93,8 @@ func buildInfoSupported() (bool, string) {
 		// cannot call Buildinfo() for two reasons:
 		// 1. It's a GET request with nil body and SigV4 requires request body to sign,
 		//    see https://github.com/prometheus/common/issues/562
-		// 2. AMP doesn't support this API anyway (returns 404)
+		// 2. AMP doesn't support this API anyway (returns 404),
+		//    see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-APIReference-Prometheus-Compatible-Apis.html
 		return false, workspaceAMP
 	}
 	return true, Empty
