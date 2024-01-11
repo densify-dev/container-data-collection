@@ -3,19 +3,20 @@ module github.com/densify-dev/container-data-collection
 go 1.21
 
 require (
-	github.com/densify-dev/container-config v1.0.3
+	github.com/densify-dev/container-config v1.0.4
 	github.com/iancoleman/strcase v0.3.0
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/common v0.45.0
 	github.com/prometheus/common/sigv4 v0.1.0
 	github.com/samber/lo v1.39.0
-	golang.org/x/exp v0.0.0-20240103183307-be819d1f06fc
+	golang.org/x/exp v0.0.0-20240110193028-0dcbfd608b1e
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.49.17 // indirect
+	github.com/aws/aws-sdk-go v1.49.18 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/densify-dev/retry-config v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
