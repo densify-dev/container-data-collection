@@ -33,7 +33,7 @@ The following tables list Prometheus metrics and how these are used by Densify.
 | kube_replicaset_labels | ReplicaSet labels |
 | kube_replicaset_created | ReplicaSet creation time |
 | kube_replicaset_owner | ReplicaSet owner |
-| kube_replicaset_spec_replicas | Replicaset current size & Deployment current size|
+| kube_replicaset_spec_replicas | ReplicaSet current size & Deployment current size|
 | kube_deployment_labels | Deployment labels |
 | kube_deployment_created | Deployment creation time |
 | kube_deployment_spec_strategy_rollingupdate_max_surge | Deployment max surge | 
@@ -47,7 +47,7 @@ The following tables list Prometheus metrics and how these are used by Densify.
 | kube_job_created | Job creation time |
 | kube_job_owner | Job owner |
 | kube_job_spec_completions | Job spec completions | What is this telling you? |
-| kube_job_spec_parallelism | Job spec parallelism, current size and CronJob curent size |
+| kube_job_spec_parallelism | Job spec parallelism, current size and CronJob current size |
 | kube_job_status_completion_time | Job status completion time |
 | kube_job_status_start_time | Job status start time |
 | kube_cronjob_labels | CronJob labels |
@@ -61,7 +61,7 @@ The following tables list Prometheus metrics and how these are used by Densify.
 | kube_statefulset_replicas | StatefulSet current size |
 | kube_daemonset_labels | DaemonSet labels |
 | kube_daemonset_created | DaemonSet creation time |
-| kube_daemonset_status_number_available | Daemonset current size |
+| kube_daemonset_status_number_available | DaemonSet current size |
 | kube_replicationcontroller_created | Replication controller creation time |
 | kube_replicationcontroller_spec_replicas | Replication controller current size |
 | kube_hpa_labels | HPA labels |
@@ -101,7 +101,7 @@ The following tables list Prometheus metrics and how these are used by Densify.
 | node_memory_MemFree_bytes | Raw memory utilization & Actual memory utilization | 
 | node_memory_Cached_bytes | Actual memory utilization | 
 | node_memory_Buffers_bytes | Actual memory utilization | 
-| node_memory_Active_bytes | Actual memory bytes | Is this mem used or available? |
+| node_memory_Active_bytes | Actual memory bytes | Is this memory used or available? |
 | node_network_receive_bytes_total | Raw net received utilization | 
 | node_network_receive_packets_total | Network packets received | 
 | node_network_transmit_bytes_total | Raw net sent utilization | 
@@ -166,7 +166,7 @@ The following tables list Prometheus metrics and how these are used by Densify.
 | Metric | Usage |
 |--------|-------|
 | kube_resourcequota_created | Resource Quota creation time |
-| kube_resourcequota | Resource Quota CPU\memory request\limit utlization (used for workload and attribute) |
+| kube_resourcequota | Resource Quota CPU\memory request\limit utilization (used for workload and attribute) |
 
 ## Cluster Resource Quota (CRQ) Metrics
 Available only for OpenShift.
@@ -176,5 +176,5 @@ Available only for OpenShift.
 | openshift_clusterresourcequota_created | Cluster Resource Quota creation time |
 | openshift_clusterresourcequota_selector | Cluster Resource Quota information |
 | openshift_clusterresourcequota_labels | Cluster Resource Quota labels |
-| openshift_clusterresourcequota_usage | CPU\memory request\limit utlization (used for workload and attribute) |
+| openshift_clusterresourcequota_usage | CPU\memory request\limit utilization (used for workload and attribute) |
 | openshift_clusterresourcequota_namespace_usage | Namespace usage information |
