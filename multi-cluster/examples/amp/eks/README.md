@@ -37,15 +37,15 @@ and verify it completes successfully.
 
 3. Modify the configmap.yaml to point to your Densify instance and to your AMP workspace.
 
-4. Create the config map in Kubernetes.
+4. Create the config map in Kubernetes
     
     `kubectl create -f configmap.yaml -n <namespace>`
 	
-5. Create the pod using pod.yaml.
+5. Create the pod using pod.yaml
     
     `kubectl create -f pod.yaml -n <namespace>`
 	
-6. Review the log for the container.
+6. Review the log for the container
 	
 	`kubectl logs densify -n <namespace>`
 	
@@ -63,10 +63,51 @@ and verify it completes successfully.
 	If the numbers are lower than expected, you probably have issues with sending container data to Densify and need to review the rest of the log and contact Densify support. Otherwise, you can move on to the next step.
 	
 	Once the collected container data is sent to Densify, the pod exits.
-		
-7. Create the cronjob using the cronjob.yaml 
+
+7. Cleanup
+
+    `kubectl delete -f pod.yaml -n <namespace>`
+
+8. Troubleshooting
+
+	In case of errors in the logs and/or small amount of files, we can check the service account, AWS IAM role AND the configuration this way.
+
+	Edit `awscurl.yaml` - in the values of the two two env vars replace `<AWS region>` (twice) and `<AMP workspace ID>` (once) with their values. Save and run:
+
+    `kubectl create -f awscurl.yaml -n <namespace>`
+
+	Now run this until you see that the `awscurl` pod is running:
+
+    `kubectl get pod awscurl -n <namespace>`
+
+	Now shell into the pod:
+
+    `kubectl exec -it awscurl -n <namespace> -- sh`
+
+	In the shell, run the following command (no need to edit it):
+	
+    `awscurl -X POST --region ${REGION} --service aps "${AMP_QUERY_ENDPOINT}" -d 'query=up' --header 'Content-Type: application/x-www-form-urlencoded'`
+	
+	If `awscurl` reports an error, there's an issue with the service account or AWS IAM role. If the call succeeds but the result is empty, it means we are connecting to an empty AMP workspace so something is wrong with our setup. If we get a non-empty result this part is OK.
+
+	Next, we want to test the cluster identifiers in the config map by running a PromQL query which should return data. For each `<label name>: <label value>` pair in each cluster's identifiers, replace these in the following command and run it:
+
+    `awscurl -X POST --region ${REGION} --service aps "${AMP_QUERY_ENDPOINT}" -d 'query=kube_node_info{<label name>="<label value>"}' --header 'Content-Type: application/x-www-form-urlencoded'`
+
+	Each one of these runs should return a non-empty result.
+
+	Now exit the shell using
+
+	`exit`
+
+	and clean up the `awscurl` pod running
+
+    `kubectl delete -f awscurl.yaml -n <namespace>`
+
+	If you have found any errors in either the service account or the config map, fix those and return to the right step in the procedure.
+
+9. Create the cronjob using the cronjob.yaml
     
     `kubectl create -f cronjob.yaml -n <namespace>`
-
-The cronjob runs and sends the collected container data to Densify hourly.
-You need to schedule the pod to run at the same `collection.interval_size` that is configured for data collection, as defined in the config map.
+	
+	The cronjob runs and sends the collected container data to Densify hourly. You need to schedule the pod to run at the same `collection.interval_size` that is configured for data collection, as defined in the config map.

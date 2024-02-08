@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: awscurl
+spec:
+  containers:
+  - name: awscurl
+    image: okigan/awscurl
+    imagePullPolicy: Always
+    command:
+      - /bin/sh
+      - "-c"
+      - "sleep 360m"
+    env:
+    - name: AMP_QUERY_ENDPOINT
+            # this value is available at
+            # https://<AWS region>.console.aws.amazon.com/prometheus/home?region=<AWS region>#/workspaces/workspace/<AMP workspace ID>
+      value: "https://aps-workspaces.<AWS region>.amazonaws.com/workspaces/<AMP workspace ID>/api/v1/query"
+    - name: REGION
+      value: "<AWS region>"
+    volumeMounts:
+    - mountPath: /root/.aws
+      name: aws
+      readOnly: true
+  volumes:
+  - name: aws
+    secret:
+      secretName: aws
+  restartPolicy: Never

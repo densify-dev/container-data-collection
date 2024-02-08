@@ -42,10 +42,6 @@ data :
             port: 443
         sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
             region: <AWS region, mandatory>
-            access_key: <AWS access key>
-            secret_key: <AWS secret key>
-            profile: <AWS profile>
-            role_arn: <AWS role ARN>
     # the entire retry section is optional, if omitted then the default values below are used
     #    retry:
     #        wait_min: 1 # in seconds

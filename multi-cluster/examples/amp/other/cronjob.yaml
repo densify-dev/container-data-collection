@@ -16,6 +16,9 @@ spec:
             - name: CONFIG_TYPE
               value: "yaml"
             volumeMounts:
+            - mountPath: /home/densify/.aws
+              name: aws
+              readOnly: true
             - mountPath: /config
               name: config
           volumes:
@@ -25,4 +28,7 @@ spec:
               items:
                 - key: config.yaml
                   path: config.yaml
+          - name: aws
+            secret:
+              secretName: aws
           restartPolicy: Never
