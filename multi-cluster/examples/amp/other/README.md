@@ -2,7 +2,7 @@ This example shows you how to setup the Data Forwarder to run on a Kubernetes cl
 
 Not running on an AWS EKS cluster means we cannot make use of EKS ability to associate Kubernetes service accounts with AWS IAM roles. Therefore the Forwarder is not running under a service account, but the AWS credentials need to be provided to it.
 
-These credentials can be specified explicitly in the configmap, but this is not a good practice. Instead we opt to run a shell script, `create-user-policy-secret.sh`, which takes care of that.
+These credentials can be specified explicitly in the config map, but this is not a good practice. Instead we opt to run a shell script, `create-user-policy-secret.sh`, which takes care of that.
 
 ## Pre-requisites
 
@@ -36,15 +36,15 @@ The shell script needs to be edited as follows:
     
     `kubectl create -f aws-secret.yaml -n <namespace>`
 
-Now edit the configmap.yaml file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
+Now edit the `configmap.yaml` file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
 
-8. Modify the configmap.yaml to point to your Densify instance and to your AMP workspace.
+8. Modify `configmap.yaml` to point to your Densify instance and to your AMP workspace.
 
-9. Create the config map in Kubernetes.
+9. Create the config map in Kubernetes
     
     `kubectl create -f configmap.yaml -n <namespace>`
 	
-10. Create the pod using pod.yaml.
+10. Create the pod using `pod.yaml`
     
     `kubectl create -f pod.yaml -n <namespace>`
 	
@@ -109,7 +109,7 @@ Now edit the configmap.yaml file, then create the config map to pass the setting
 
 	If you have found any errors in either the AWS secret or the config map, fix those and return to the right step in the procedure.
 
-14. Create the cronjob using cronjob.yaml
+14. Create the cronjob using `cronjob.yaml`
     
     `kubectl create -f cronjob.yaml -n <namespace>`
 	

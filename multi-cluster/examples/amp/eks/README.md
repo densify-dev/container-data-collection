@@ -4,7 +4,7 @@ Running on an AWS EKS cluster means we can make use of EKS ability to associate 
 
 The creation of the IAM policy, role and service account is done in steps 1-2. 
 
-After this is completed successfully, we proceed to edit the configmap.yaml file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
+After this is completed successfully, we proceed to edit the `configmap.yaml` file, then create the config map to pass the settings to `config.yaml`. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
 
 ## Pre-requisites
 
@@ -35,13 +35,13 @@ Run the shell script using
 `./create-service-account.sh`
 and verify it completes successfully.
 
-3. Modify the configmap.yaml to point to your Densify instance and to your AMP workspace.
+3. Modify `configmap.yaml` to point to your Densify instance and to your AMP workspace.
 
 4. Create the config map in Kubernetes
     
     `kubectl create -f configmap.yaml -n <namespace>`
 	
-5. Create the pod using pod.yaml
+5. Create the pod using `pod.yaml`
     
     `kubectl create -f pod.yaml -n <namespace>`
 	
@@ -106,7 +106,7 @@ and verify it completes successfully.
 
 	If you have found any errors in either the service account or the config map, fix those and return to the right step in the procedure.
 
-9. Create the cronjob using the cronjob.yaml
+9. Create the cronjob using `cronjob.yaml`
     
     `kubectl create -f cronjob.yaml -n <namespace>`
 	

@@ -1,8 +1,8 @@
 This example shows you how to setup the Data Forwarder to connect to an authenticated Prometheus configuration. This is typically the case for OpenShift default monitoring setup, where the Prometheus server is setup for authentication, even if the internal kubernetes service name is used. If you have tried the CronJob example and received an x509 or 403 error, then you likely need to use this setup. 
 
-To configure the Data Forwarder with an authenticated Prometheus, you need to edit the configmap.yaml, create a service account, cluster role, and cluster role binding. To test the Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cron job to run data collection every hour.
+To configure the Data Forwarder with an authenticated Prometheus, you need to edit the `configmap.yaml` file, then create the config map to pass the settings to `config.properties`. In addition, create a service account, cluster role, and cluster role binding. To test the Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cron job to run data collection every hour.
 
-1. Modify the configmap.yaml to point to your Densify instance and the Prometheus server.
+1. Modify `configmap.yaml` to point to your Densify instance and the Prometheus server.
 2. Create the service account:
 
     `kubectl create -f serviceaccount.yaml`
@@ -23,11 +23,11 @@ To configure the Data Forwarder with an authenticated Prometheus, you need to ed
 
     `kubectl create -f configmap.yaml -n <namespace>`
 	
-7. Create the pod to test the Forwarder using pod.yaml:
+7. Create the pod to test the Forwarder using `pod.yaml`:
 
     `kubectl create -f pod.yaml -n <namespace>`
 	
-8. Review the log for the container. 
+8. Review the log for the container
 
 	`kubectl logs densify -n <namespace>`
 	
@@ -42,7 +42,7 @@ To configure the Data Forwarder with an authenticated Prometheus, you need to ed
 	
 	Once the collected container data is sent to Densify, the pod exits.
 
-9. Create the cron job using the cronjob.yaml
+9. Create the cron job using `cronjob.yaml`
 
     `kubectl create -f cronjob.yaml -n <namespace>`
 
