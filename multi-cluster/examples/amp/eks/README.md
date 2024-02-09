@@ -72,7 +72,7 @@ and verify it completes successfully.
 
 	In case of errors in the logs and/or small amount of files, we can check the service account, AWS IAM role AND the configuration this way.
 
-	Edit `awscurl.yaml` - in the values of the two two env vars replace `<AWS region>` (twice) and `<AMP workspace ID>` (once) with their values. Save and run:
+	Edit `awscurl.yaml` - in the values of the two env vars replace `<AWS region>` (twice) and `<AMP workspace ID>` (once) with their values. Save and run:
 
     `kubectl create -f awscurl.yaml -n <namespace>`
 

@@ -36,7 +36,7 @@ The shell script needs to be edited as follows:
     
     `kubectl create -f aws-secret.yaml -n <namespace>`
 
-Now edit the `configmap.yaml` file, then create the config map to pass the settings to config.yaml. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
+Now edit the `configmap.yaml` file, then create the config map to pass the settings to `config.yaml`. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
 
 8. Modify `configmap.yaml` to point to your Densify instance and to your AMP workspace.
 
@@ -75,7 +75,7 @@ Now edit the `configmap.yaml` file, then create the config map to pass the setti
 
 	In case of errors in the logs and/or small amount of files, we can check the AWS secret, AWS IAM role AND the configuration this way.
 
-	Edit `awscurl.yaml` - in the values of the two two env vars replace `<AWS region>` (twice) and `<AMP workspace ID>` (once) with their values. Save and run:
+	Edit `awscurl.yaml` - in the values of the two env vars replace `<AWS region>` (twice) and `<AMP workspace ID>` (once) with their values. Save and run:
 
     `kubectl create -f awscurl.yaml -n <namespace>`
 
