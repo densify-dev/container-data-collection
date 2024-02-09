@@ -3,20 +3,20 @@ module github.com/densify-dev/container-data-collection
 go 1.21
 
 require (
-	github.com/densify-dev/container-config v1.0.4
+	github.com/densify-dev/container-config v1.0.9
+	github.com/densify-dev/net-utils v1.0.4
 	github.com/iancoleman/strcase v0.3.0
 	github.com/prometheus/client_golang v1.18.0
-	github.com/prometheus/common v0.45.0
+	github.com/prometheus/common v0.46.0
 	github.com/prometheus/common/sigv4 v0.1.0
 	github.com/samber/lo v1.39.0
-	golang.org/x/exp v0.0.0-20240110193028-0dcbfd608b1e
+	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.49.18 // indirect
+	github.com/aws/aws-sdk-go v1.50.15 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/densify-dev/retry-config v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -43,9 +43,9 @@ require (
 	github.com/spf13/viper v1.18.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
-	golang.org/x/oauth2 v0.16.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/oauth2 v0.17.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect

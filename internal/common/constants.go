@@ -188,6 +188,9 @@ const (
 	rightBrace         = "}"
 	leftBracket        = "("
 	rightBracket       = ")"
+	leftSquareBracket  = "["
+	rightSquareBracket = "]"
+	squareBrackets     = leftSquareBracket + rightSquareBracket
 	Comma              = cconf.Comma
 	Dot                = cconf.Dot
 	Slash              = cconf.Slash

@@ -20,7 +20,6 @@ func getNode(cluster string, ss *model.SampleStream, nodeLabel model.LabelName) 
 const (
 	ephemeralStorage = "ephemeral_storage"
 	hugePages        = "hugepages_2Mi"
-	nodeExporter     = "node_exporter"
 )
 
 func setValue(what *int, value float64) {
@@ -28,29 +27,20 @@ func setValue(what *int, value float64) {
 }
 
 type metricHolder struct {
-	name string
-}
-
-func getIndicator(s string) string {
-	switch s {
-	case common.NetSpeedBytes:
-		return nodeExporter
-	default:
-		return s
-	}
+	name      string
+	labelName model.LabelName
 }
 
 func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 	if result.Len() > 0 {
 		switch mh.name {
-		case common.Capacity, common.Allocatable, common.NetSpeedBytes, common.Limits, common.Requests:
-			ind := getIndicator(mh.name)
-			indicators[ind] = indicators[ind] + 1
+		case common.Capacity, common.Allocatable, common.Limits, common.Requests:
+			indicators[mh.name] = indicators[mh.name] + 1
 		default:
 		}
 	}
 	for _, ss := range result {
-		n, ok := getNode(cluster, ss, common.Node)
+		n, ok := getNode(cluster, ss, mh.labelName)
 		if !ok {
 			continue
 		}
@@ -126,12 +116,12 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 // getNodeMetricString is used to parse the label-based results from Prometheus related to nodes and store them
 func getNodeMetricString(cluster string, result model.Matrix) {
 	for _, ss := range result {
-		node, ok := getNode(cluster, ss, common.Node)
+		n, ok := getNode(cluster, ss, common.Node)
 		if !ok {
 			continue
 		}
 		for key, value := range ss.Metric {
-			common.AddToLabelMap(string(key), string(value), node.labelMap)
+			common.AddToLabelMap(string(key), string(value), n.labelMap)
 		}
 	}
 }

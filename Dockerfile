@@ -3,6 +3,7 @@ ARG BASE_IMAGE=alpine
 FROM golang:bookworm as builder
 ADD . /github.com/densify-dev/container-data-collection
 WORKDIR /github.com/densify-dev/container-data-collection/cmd
+RUN go generate github.com/densify-dev/container-data-collection/internal/common
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -gcflags=-trimpath="${GOPATH}" -asmflags=-trimpath="${GOPATH}" -ldflags="-w -s" -o ./dataCollection .
 
 FROM ${BASE_IMAGE}:latest
@@ -53,7 +54,7 @@ RUN mkdir /config
 
 WORKDIR /home/densify
 RUN mkdir -p data && chown -R densify:densify /home/densify/data && chmod -R 777 /home/densify/data && ln -s /config config
-COPY --chown=densify:densify --chmod=755 ./tools bin
-COPY --chown=densify:densify --chmod=755 --from=builder /github.com/densify-dev/container-data-collection/cmd/dataCollection bin
+COPY --chown=densify:densify --chmod=755 ./tools/forwarder ./tools/entry.sh bin/
+COPY --chown=densify:densify --chmod=755 --from=builder /github.com/densify-dev/container-data-collection/cmd/dataCollection bin/
 USER 3000
 CMD ["/home/densify/bin/entry.sh"]

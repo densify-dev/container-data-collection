@@ -1,16 +1,16 @@
 package common
 
 import (
+	_ "embed"
 	cconf "github.com/densify-dev/container-config/config"
 	"strings"
 	"time"
 )
 
-const (
-	Version = "4.0.0"
-)
-
 // globals
+//go:generate sh -c "printf %s $(git describe --abbrev=0 --tags) > version.txt"
+//go:embed version.txt
+var Version string
 var Params *cconf.Parameters
 var CurrentTime time.Time
 

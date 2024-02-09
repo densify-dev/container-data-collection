@@ -346,8 +346,6 @@ func Metrics() {
 		query = `sum(kube_pod_container_resource_requests_memory_bytes{}) by (pod,namespace,container)`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
-	query = `container_spec_cpu_shares{name!~"k8s_POD_.*"}`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
 	query = `kube_pod_container_info{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
 

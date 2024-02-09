@@ -56,11 +56,35 @@ func CollectMetric(callDepth int, query string, promRange v1.Range) (crm Cluster
 	return
 }
 
-func GetVersion() (found bool, version string, err error) {
+func CheckPrometheusUp() (n int) {
+	var err error
+	var pa v1.API
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = time.AfterFunc(2*time.Minute, func() { cancel() })
+	if pa, err = promApi(Empty); err == nil {
+		var value model.Value
+		if value, _, err = pa.QueryRange(ctx, "max(up)", TimeRange()); err == nil {
+			if mat, ok := value.(model.Matrix); ok {
+				for _, ss := range mat {
+					for _, v := range ss.Values {
+						if v.Value > 0 {
+							n++
+						}
+					}
+				}
+			}
+		}
+	}
+	failOnConnectionError(err)
+	return
+}
+
+func GetPrometheusVersion() (version string, found bool) {
 	if supported, forWhat := buildInfoSupported(); !supported {
 		version = fmt.Sprintf(verNotDetected, forWhat)
 		return
 	}
+	var err error
 	var pa v1.API
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = time.AfterFunc(1*time.Minute, func() { cancel() })

@@ -185,6 +185,8 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)
+			// skip extra call to getContainerMetricString
+			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 		case common.CpuRequest:
@@ -645,9 +647,9 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
 			for clName, cluster := range hMap {
 				if clusterFiles[clName] == nil {
 					clusterFiles[clName] = make(map[bool]*os.File, l)
-					wmh := wmhs[isClassified]
-					clusterFiles[clName][isClassified] = common.InitWorkloadFile(clName, wmh.GetFileName(), hpaWorkloadEntityTypes[isClassified], csvHeaderFormat, wmh.GetMetricName())
 				}
+				wmh := wmhs[isClassified]
+				clusterFiles[clName][isClassified] = common.InitWorkloadFile(clName, wmh.GetFileName(), hpaWorkloadEntityTypes[isClassified], csvHeaderFormat, wmh.GetMetricName())
 				for nsName, ns := range cluster {
 					for hpaName, h := range ns {
 						var fieldSet [][]string

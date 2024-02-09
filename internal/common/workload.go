@@ -136,6 +136,9 @@ func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName
 				LogErrorWithLevel(1, Warn, err, QueryFormat, metricName, query)
 			} else {
 				for cluster, result := range crm {
+					if result == nil || result.Matrix.Len() == 0 {
+						continue
+					}
 					file, initialized := clusterFiles[cluster]
 					if !initialized {
 						file = InitWorkloadFile(cluster, fileName, entityKind, csvHeaderFormat, metricName)
@@ -162,8 +165,14 @@ func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName
 }
 
 func InitWorkloadFile(cluster, fileName, entityKind, csvHeaderFormat, metricName string) *os.File {
-	workloadWrite, err := os.Create(GetFileName(cluster, entityKind, fileName))
-	if err != nil {
+	var err error
+	if _, err = os.Stat(fileName); err == nil {
+		err = fmt.Errorf("%s %v", fileName, os.ErrExist)
+		LogError(err, DefaultLogFormat, cluster, entityKind)
+		return nil
+	}
+	var workloadWrite *os.File
+	if workloadWrite, err = os.Create(GetFileName(cluster, entityKind, fileName)); err != nil {
 		LogError(err, DefaultLogFormat, cluster, entityKind)
 		return nil
 	}

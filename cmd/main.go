@@ -26,15 +26,17 @@ func main() {
 	}
 	common.InitLogs()
 	common.LogAll(1, common.Info, "Container data collection version %s", common.Version)
-	var ver string
-	var verFound bool
-	if verFound, ver, err = common.GetVersion(); err == nil {
-		var prefix string
-		if verFound {
-			prefix = "Detected "
-		}
-		common.LogAll(1, common.Info, "%sPrometheus version %s", prefix, ver)
+	if upCount := common.CheckPrometheusUp(); upCount == 0 {
+		common.LogAll(1, common.Warn, "Prometheus server is up but reports no `up` metrics with value 1 for any scrape config, please verify it is actually scraping / collecting data")
+	} else {
+		common.LogAll(1, common.Info, "Prometheus server is up and reports `up` metrics with value 1 for scrape config(s)")
 	}
+	ver, verFound := common.GetPrometheusVersion()
+	var logVerPrefix string
+	if verFound {
+		logVerPrefix = "Detected "
+	}
+	common.LogAll(1, common.Info, "%sPrometheus version %s", logVerPrefix, ver)
 	if includes(common.ContainerEntityKind) {
 		container.Metrics()
 	} else {

@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	nnet "github.com/densify-dev/net-utils/network"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"sync"
@@ -19,67 +20,36 @@ type node struct {
 // Map that labels and values will be stored in
 var nodes = make(map[string]map[string]*node)
 
-type queryWrapper struct {
-	query, sumQuery *common.WorkloadQueryWrapper
-	metricField     []model.LabelName
-}
-
-const (
-	ByPodIpSuffix     = `, "pod_ip", "$1", "instance", "(.*):.*")) by (pod_ip) * on (pod_ip) group_right kube_pod_info{pod=~".*node-exporter.*"}`
-	byPodIpSuffixNode = ByPodIpSuffix + `) by (node)`
-)
-
-var queryWrapperByPodIp = map[bool]*queryWrapper{
-	true: {
-		query: &common.WorkloadQueryWrapper{
-			Prefix: "max(max(label_replace(",
-			Suffix: byPodIpSuffixNode,
-		},
-		sumQuery: &common.WorkloadQueryWrapper{
-			Prefix: "max(sum(label_replace(",
-			Suffix: byPodIpSuffixNode,
-		},
-		metricField: []model.LabelName{common.Node},
-	},
-	false: {
-		query: &common.WorkloadQueryWrapper{},
-		sumQuery: &common.WorkloadQueryWrapper{
-			Prefix: "sum(",
-			Suffix: ") by (instance)",
-		},
-		metricField: []model.LabelName{common.Instance},
-	},
-}
-
 // Metrics a global func for collecting node level metrics in prometheus
 func Metrics() {
 	var query string
 	var err error
 	range5Min := common.TimeRange()
 
-	//Query and store kubernetes node information/labels
-	query = "max(kube_node_labels{}) by (instance, node)"
+	// node information/labels
+	query = "kube_node_info{}"
 	if _, err := common.CollectAndProcessMetric(query, range5Min, createNode); err != nil {
 		// error already handled
 		return
 	}
 
-	// Additional config/attribute queries
+	// additional config/attribute queries
 	query = `kube_node_labels{}`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeMetricString)
-
-	query = `kube_node_info{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeMetricString)
 
 	query = `kube_node_role{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeMetricString)
 
+	DetermineNodeExporter(range5Min)
+
 	mh := &metricHolder{name: common.NetSpeedBytes}
+	for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
+		mh.labelName = qw.MetricField[0]
+		query = qw.Query.Wrap(`max(node_network_speed_bytes{device!~"veth.*|docker.*|cilium.*|lxc.*"}) by (node, instance)`)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+	}
 
-	// netSpeedBytes is also used to determine if node exporter is present
-	query = `label_replace(node_network_speed_bytes{}, "pod_ip", "$1", "instance", "(.*):.*")`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
-
+	mh.labelName = common.Node
 	// Queries the capacity fields of all nodes
 	mh.name = common.Capacity
 	query = `kube_node_status_capacity{}`
@@ -141,62 +111,60 @@ func Metrics() {
 	writeConfig()
 	writeAttributes()
 
-	// bail out if detected that Prometheus Node Exporter is not present
-	if !common.Found(indicators, nodeExporter, true) {
-		err = fmt.Errorf("prometheus node exporter not present in any cluster")
+	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
+	if !HasNodeExporter(range5Min) {
+		err = fmt.Errorf("prometheus node exporter metrics not present for any cluster")
 		common.LogError(err, "entity=%s", common.NodeEntityKind)
 		return
 	}
 
-	DetermineByPodIp(range5Min)
+	for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
 
-	for _, f := range FoundCountersByPodIp() {
-		qw := queryWrapperByPodIp[f]
+		query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
+		query = qw.Query.Wrap(query)
+		common.CpuUtilization.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.query.Wrap(`sum(irate(node_cpu_seconds_total{mode!="idle"}[` + common.Params.Collection.SampleRateSt + `m])) by (instance) / on (instance) group_left count(node_cpu_seconds_total{mode="idle"}) by (instance) *100`)
-		common.CpuUtilization.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}`)
+		common.MemoryBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.query.Wrap(`node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}`)
-		common.MemoryBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
+		common.MemoryActualWorkload.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
-		common.MemoryActualWorkload.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.DiskReadBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskReadBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.DiskWriteBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskWriteBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.DiskTotalBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskTotalBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.DiskReadOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_disk_read_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) / irate(node_disk_io_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskReadOps.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.DiskWriteOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_disk_write_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) / irate(node_disk_io_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskWriteOps.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
+		common.DiskTotalOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`(irate(node_disk_read_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_write_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])) / irate(node_disk_io_time_seconds_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskTotalOps.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetReceivedBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetReceivedBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetSentBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetSentBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetTotalBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetTotalBytes.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetReceivedPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetReceivedPackets.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetSentPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.sumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetSentPackets.GetWorkload(query, qw.metricField, common.NodeEntityKind)
-
-		query = qw.sumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetTotalPackets.GetWorkload(query, qw.metricField, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+		common.NetTotalPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 	}
 }
 
@@ -252,8 +220,9 @@ func createNode(cluster string, result model.Matrix) {
 	}
 	for _, ss := range result {
 		nodeName := string(ss.Metric[common.Node])
-		if _, f = nodes[cluster][nodeName]; !f {
-			nodes[cluster][nodeName] = &node{
+		var n *node
+		if n, f = nodes[cluster][nodeName]; !f {
+			n = &node{
 				netSpeedBytes:               common.UnknownValue,
 				cpuCapacity:                 common.UnknownValue,
 				memCapacity:                 common.UnknownValue,
@@ -271,32 +240,116 @@ func createNode(cluster string, result model.Matrix) {
 				memRequest:                  common.UnknownValue,
 				labelMap:                    make(map[string]string),
 			}
+			nodes[cluster][nodeName] = n
+		}
+		// collect all the labels too
+		for key, value := range ss.Metric {
+			common.AddToLabelMap(string(key), string(value), n.labelMap)
 		}
 	}
 }
 
 const (
-	byPodIpQueryFormat = `max(max(label_replace(sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (instance) / on (instance) group_left count(node_cpu_seconds_total{mode="idle"}) by (instance) *100, "pod_ip", "$1", "instance", "(.*):.*")) by (pod_ip) * on (pod_ip) group_right kube_pod_info{pod=~".*node-exporter.*"}) by (node)`
+	nodeExporterPivotQuery = "max(node_cpu_seconds_total{}) by (node, instance)"
+	HasNodeLabel           = "node_label_node_name"     // "node" label is present and has the node name
+	HasInstanceLabelPodIp  = "instance_label_pod_ip"    // "node" label is absent, "instance" label has a format of IP address:port
+	HasInstanceLabelOther  = "instance_label_node_name" // "node" label is absent, "instance" label has a different format and assumed to be node name
 )
-
-var byPodIp int
-
-func incByPodIp(_ string, result model.Matrix) {
-	if result.Len() > 0 {
-		byPodIp++
-	}
-}
 
 var once sync.Once
 
-// DetermineByPodIp checks to see if instance is IP address that need to link to pod to get name or if instance = node name
-func DetermineByPodIp(range5Min v1.Range) {
+func DetermineNodeExporter(range5Min v1.Range) {
 	once.Do(func() {
-		query := fmt.Sprintf(byPodIpQueryFormat, common.Params.Collection.SampleRateSt)
-		_, _ = common.CollectAndProcessMetric(query, range5Min, incByPodIp)
+		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
 	})
 }
 
-func FoundCountersByPodIp() []bool {
-	return common.FoundCounter(byPodIp)
+var nodeExporterIndicators = make(map[string][]string)
+
+func determineNodeExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		ss := result[l-1]
+		var indicator string
+		var f bool
+		if _, f = ss.Metric[common.Node]; f {
+			indicator = HasNodeLabel
+		} else {
+			var instance model.LabelValue
+			if instance, f = ss.Metric[common.Instance]; f {
+				if _, _, err := nnet.ParseAddress(string(instance)); err == nil {
+					indicator = HasInstanceLabelPodIp
+				} else {
+					indicator = HasInstanceLabelOther
+				}
+			}
+		}
+		if f {
+			nodeExporterIndicators[indicator] = append(nodeExporterIndicators[indicator], cluster)
+		}
+	}
+}
+
+// HasNodeExporter returns true if node exporter metrics are present for any cluster
+func HasNodeExporter(range5Min v1.Range) bool {
+	DetermineNodeExporter(range5Min)
+	return len(nodeExporterIndicators) > 0
+}
+
+var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
+
+type QueryWrapper struct {
+	Query, SumQuery *common.WorkloadQueryWrapper
+	MetricField     []model.LabelName
+}
+
+const (
+	ByPodIpSuffix     = `, "pod_ip", "$1", "instance", "(.*):.*")) by (pod_ip) * on (pod_ip) group_right kube_pod_info{pod=~".*node-exporter.*"}`
+	byPodIpSuffixNode = ByPodIpSuffix + `) by (node)`
+)
+
+var queryWrappersMap = map[string]*QueryWrapper{
+	HasInstanceLabelPodIp: {
+		Query: &common.WorkloadQueryWrapper{
+			Prefix: "max(max(label_replace(",
+			Suffix: byPodIpSuffixNode,
+		},
+		SumQuery: &common.WorkloadQueryWrapper{
+			Prefix: "max(sum(label_replace(",
+			Suffix: byPodIpSuffixNode,
+		},
+		MetricField: []model.LabelName{common.Node},
+	},
+	HasNodeLabel:          simpleQueryWrapper(common.Node),
+	HasInstanceLabelOther: simpleQueryWrapper(common.Instance),
+}
+
+func simpleQueryWrapper(labelName string) *QueryWrapper {
+	return &QueryWrapper{
+		Query: &common.WorkloadQueryWrapper{},
+		SumQuery: &common.WorkloadQueryWrapper{
+			Prefix: "sum(",
+			Suffix: fmt.Sprintf(") by (%s)", labelName),
+		},
+		MetricField: []model.LabelName{model.LabelName(labelName)},
+	}
+}
+
+var queryWrappers []*QueryWrapper
+
+// GetQueryWrappers returns the query wrappers that are relevant for the current environment
+func GetQueryWrappers(qws *[]*QueryWrapper, qwm map[string]*QueryWrapper) []*QueryWrapper {
+	if qws == nil {
+		return nil
+	}
+	if *qws == nil {
+		for _, key := range queryWrapperKeys {
+			if _, f := nodeExporterIndicators[key]; f {
+				var qw *QueryWrapper
+				if qw, f = qwm[key]; f {
+					*qws = append(*qws, qw)
+				}
+			}
+		}
+	}
+	return *qws
 }
