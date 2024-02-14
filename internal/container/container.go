@@ -566,6 +566,10 @@ func Metrics() {
 	wq.baseQuery = fmt.Sprintf(`max(container_memory_rss{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
+	wq.metricName = workingSet
+	wq.baseQuery = fmt.Sprintf(`max(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	getWorkload(wq)
+
 	// container_fs_usage_bytes is an issue if the k8s cluster container runtime is containerd, see
 	// https://github.com/google/cadvisor/issues/2785, https://github.com/google/cadvisor/issues/3315
 	// it is supported by docker and cri-o container runtimes
