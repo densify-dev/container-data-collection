@@ -1,8 +1,10 @@
-This example shows you how to setup the Data Forwarder to run on a Kubernetes cluster not on AWS EKS, connect to Amazon Managed Prometheus (AMP) and send container data to Densify on an hourly basis. 
+This example shows you how to setup the Data Forwarder to run on a Kubernetes cluster not on AWS EKS, connect to Amazon Managed Prometheus (AMP) and send container data to Densify on an hourly basis.
 
 Not running on an AWS EKS cluster means we cannot make use of EKS ability to associate Kubernetes service accounts with AWS IAM roles. Therefore the Forwarder is not running under a service account, but the AWS credentials need to be provided to it.
 
 These credentials can be specified explicitly in the config map, but this is not a good practice. Instead we opt to run a shell script, `create-user-policy-secret.sh`, which takes care of that.
+
+Note: these instructions can be followed on an EKS cluster as well, though running on an EKS cluster the instructions at the [EKS section](../eks) are preferred. You may choose for these instructions for EKS cluster as well in case you have multiple cloud provider Kubernetes clusters (all feeding AMP) and opt for a standard way to run the forwarder.
 
 ## Pre-requisites
 
