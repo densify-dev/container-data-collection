@@ -1,0 +1,79 @@
+apiVersion :  v1
+kind :  ConfigMap
+metadata :
+  name :  densifyconf
+data : 
+  config.yaml : |
+    forwarder:
+        densify:
+            url:
+                scheme: https
+                host: <instance>.densify.com
+                port: 443
+                username: <Densify user>
+    #            password: <plaintext Densify password, or:>
+    #            encrypted_password: <encrypted Densify password>
+            endpoint: /api/v2/
+    # the entire retry section is optional, if omitted then the default values below are used
+    #        retry:
+    #            wait_min: 1 # in seconds
+    #            wait_max: 30 # in seconds
+    #            max_attempts: 4
+    #            policy: default # valid values: default (same as exponential), exponential, jitter
+    #    proxy:
+    #        url:
+    #            scheme: https
+    #            host: proxy.company.com
+    #            port: 443
+    #            username: <proxy user>
+    #            password: <plaintext proxy password, or:>
+    #            encrypted_password: <encrypted proxy password>
+    #        auth: <Basic (default)|NTLM>
+    #        server: <proxy server, required for NTLM>
+    #        domain: <proxy domain, required for NTLM>
+    #    prefix: <zip file prefix>
+    prometheus:
+        url:
+            scheme: https
+            # the host is available at the "Query Endpoint" in the Azure Monitor Workspace page on Azure Portal
+            host: <AzMP workspace>.<Azure region>.prometheus.monitor.azure.com
+            port: 443
+    #        username: <Prometheus basic auth username / name of file containing this info>
+    #        password: <Prometheus basic auth password / name of file containing this info>
+    #    bearer_token: /var/run/secrets/kubernetes.io/serviceaccount/token # required by some observability platforms; the value can be the token or name of file containing it
+    #    ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+    #    sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
+    #        region: <AWS region, mandatory>
+    #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
+    # the entire retry section is optional, if omitted then the default values below are used
+    #    retry:
+    #        wait_min: 1 # in seconds
+    #        wait_max: 30 # in seconds
+    #        max_attempts: 4
+    #        policy: default # valid values: default (same as exponential), exponential, jitter
+    collection:
+    # the include section is optional, if omitted or empty then all entity types are included
+    #    include:
+    #        cluster: true
+    #        container: true
+    #        node: true
+    #        nodegroup: true
+    #        quota: true
+    #    interval: <days|hours (default)|minutes>
+    #    interval_size: 1
+    #    history: 1
+    #    offset: 0
+    #    sample_rate: 5
+    #    node_group_list: label_cloud_google_com_gke_nodepool,label_eks_amazonaws_com_nodegroup,label_agentpool,label_pool_name,label_alpha_eksctl_io_nodegroup_name,label_kops_k8s_io_instancegroup
+    clusters:
+        - name: <cluster-1 name>
+          identifiers: # identifiers is a map of Prometheus labels (name and value) to uniquely identify the cluster; if omitted, only one cluster can be present in the list
+              <label name>: <label value>
+    #         ... (more labels)
+        - name: <cluster-2 name>
+          identifiers: # identifiers is a map of Prometheus labels (name and value) to uniquely identify the cluster; if omitted, only one cluster can be present in the list
+              <label name>: <label value>
+    #         ... (more labels)
+    #   ... (more clusters)
+    #
+    # debug: <true|false (default)>

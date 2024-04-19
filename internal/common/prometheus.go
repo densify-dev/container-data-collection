@@ -99,37 +99,76 @@ func GetPrometheusVersion() (version string, found bool) {
 	return
 }
 
-var once sync.Once
+var onceConn sync.Once
 
 func failOnConnectionError(err error) {
 	// if the very first attempt to connect to Prometheus fails, bail out as most probably
 	// the configuration is wrong
-	once.Do(func() {
+	onceConn.Do(func() {
 		if err != nil {
 			FatalError(err, "Failed to connect to Prometheus:")
 		}
 	})
 }
 
-func buildInfoSupported() (bool, string) {
-	if Params.Prometheus.SigV4Config != nil ||
-		strings.HasPrefix(strings.ToLower(Params.Prometheus.UrlConfig.Host), workspaceAMPPattern) {
-		// cannot call Buildinfo() for two reasons:
-		// 1. It's a GET request with nil body and SigV4 requires request body to sign,
-		//    see https://github.com/prometheus/common/issues/562
-		// 2. AMP doesn't support this API anyway (returns 404),
-		//    see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-APIReference-Prometheus-Compatible-Apis.html
-		return false, workspaceAMP
+type ObservabilityPlatform string
+
+const (
+	UnknownPlatform               ObservabilityPlatform = Empty
+	AWSManagedPrometheus          ObservabilityPlatform = "AWS Managed Prometheus"
+	AzureMonitorManagedPrometheus ObservabilityPlatform = "Azure Monitor Managed Prometheus"
+	GrafanaCloud                  ObservabilityPlatform = "Grafana Cloud"
+)
+
+const (
+	workspaceAMPPattern = "aps-workspaces"
+	fqdnAzMP            = "prometheus.monitor.azure.com"
+	fqdnGrafanaCloud    = "grafana.net"
+)
+
+var op ObservabilityPlatform
+var onceOp sync.Once
+
+func GetObservabilityPlatform() ObservabilityPlatform {
+	onceOp.Do(func() {
+		op = getObservabilityPlatform()
+	})
+	return op
+}
+
+func getObservabilityPlatform() ObservabilityPlatform {
+	host := strings.ToLower(Params.Prometheus.UrlConfig.Host)
+	if Params.Prometheus.SigV4Config != nil || strings.HasPrefix(host, workspaceAMPPattern) {
+		return AWSManagedPrometheus
 	}
-	return true, Empty
+	if strings.HasSuffix(host, fqdnAzMP) {
+		return AzureMonitorManagedPrometheus
+	}
+	if strings.Contains(host, fqdnGrafanaCloud) && Params.Prometheus.UrlConfig.Password != Empty {
+		return GrafanaCloud
+	}
+	return UnknownPlatform
+}
+
+func buildInfoSupported() (bool, string) {
+	switch observabilityPlatform := GetObservabilityPlatform(); observabilityPlatform {
+	case AWSManagedPrometheus, AzureMonitorManagedPrometheus:
+		// AMP and AzMP don't support Buildinfo() (both return 404):
+		// * https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-APIReference-Prometheus-Compatible-Apis.html
+		// * https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql#supported-apis
+		// In addition, AWS SigV4 requires request body to sign (and BuildInfo is a GET with nil body), see
+		// https://github.com/prometheus/common/issues/562
+		return false, fmt.Sprintf(platformWorkspaces, observabilityPlatform)
+	default:
+		return true, Empty
+	}
 }
 
 const (
-	verNotDetected      = "cannot be detected for %s"
-	workspaceAMP        = "AMP workspaces"
-	workspaceAMPPattern = "aps-workspaces"
-	promClient          = "prometheus-client"
-	labelPrefix         = Label + Underscore
+	verNotDetected     = "cannot be detected for %s"
+	platformWorkspaces = "%s workspaces"
+	promClient         = "prometheus-client"
+	labelPrefix        = Label + Underscore
 )
 
 func promApi(cluster string) (v1.API, error) {
@@ -156,6 +195,9 @@ func promApi(cluster string) (v1.API, error) {
 	// Bearer token can be used for a number of solutions supporting Prometheus-API.
 	// One of these is Azure Monitor managed Prometheus - see:
 	// https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql
+	// Another one is Openshift Monitoring Stack - see:
+	// https://docs.openshift.com/container-platform/4.15/monitoring/configuring-the-monitoring-stack.html
+	// The bearer token can be passed as a string or as a path to a file.
 	vop, err = cconf.NewValueOrPath(Params.Prometheus.BearerToken, false, false)
 	if !vop.IsEmpty() {
 		if vop.IsFile() {

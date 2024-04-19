@@ -293,6 +293,33 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 	}
 }
 
+func getOwnerQuery(metricName string, owned bool) (query string) {
+	// Azure Monitor does not support PromQL regex properly -
+	// https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql#api-limitations
+	// claims that "Query/series does not support regular expression filter".
+	// In practice, it is supported, but with limitations;
+	// e.g. regex with OR of an empty string like "<none>|" returns ALL label values i.s.o. "<none>" and the empty string only
+	var binOp, logOp string
+	if common.GetObservabilityPlatform() == common.AzureMonitorManagedPrometheus {
+		if owned {
+			binOp = "!="
+			logOp = "and"
+		} else {
+			binOp = "="
+			logOp = "or"
+		}
+		query = fmt.Sprintf(`%s{owner_name%s"<none>"} %s %s{owner_name%s""}`, metricName, binOp, logOp, metricName, binOp)
+	} else {
+		if owned {
+			binOp = "!~"
+		} else {
+			binOp = "=~"
+		}
+		query = fmt.Sprintf(`%s{owner_name%s"<none>|"}`, metricName, binOp)
+	}
+	return
+}
+
 // Metrics function to collect data related to containers.
 func Metrics() {
 	var query string
@@ -303,16 +330,16 @@ func Metrics() {
 
 	common.DebugLogMemStats(1, "container data collection")
 	// queries to gather hierarchy information for containers
-	query = `sum(kube_pod_owner{owner_name!="<none>"}) by (namespace, pod, owner_name, owner_kind)`
+	query = fmt.Sprintf(`sum(%s) by (namespace, pod, owner_name, owner_kind)`, getOwnerQuery("kube_pod_owner", true))
 	oth := &ownedTypeHolder{ownedType: pth}
 	if n, err = common.CollectAndProcessMetric(query, range5Min, oth.getOwners); err != nil || n == 0 {
 		// error already handled
 		return
 	}
-	query = `sum(kube_replicaset_owner{owner_name!="<none>"}) by (namespace, replicaset, owner_name, owner_kind)`
+	query = fmt.Sprintf(`sum(%s) by (namespace, replicaset, owner_name, owner_kind)`, getOwnerQuery("kube_replicaset_owner", true))
 	oth = &ownedTypeHolder{ownedType: rsth, ownerType: common.Deployment}
 	_, _ = common.CollectAndProcessMetric(query, range5Min, oth.getOwners)
-	query = `sum(kube_job_owner{owner_name!="<none>"}) by (namespace, job_name, owner_name, owner_kind)`
+	query = fmt.Sprintf(`sum(%s) by (namespace, job_name, owner_name, owner_kind)`, getOwnerQuery("kube_job_owner", true))
 	oth = &ownedTypeHolder{ownedType: jth, ownerType: common.CronJob}
 	_, _ = common.CollectAndProcessMetric(query, range5Min, oth.getOwners)
 	query = `max(kube_pod_container_info{}) by (container, pod, namespace)`
@@ -530,7 +557,7 @@ func Metrics() {
 	// container workloads
 	common.DebugLogObjectMemStats(common.JoinSpace(common.Container, common.Workload))
 	groupClauses := map[string]*queryProcessorBuilder{
-		fmt.Sprintf(` * on (pod, namespace) group_left max(kube_pod_owner{owner_name=~"<none>|"}) by (namespace, pod, %s)) by (pod,namespace,%s)`, labelPlaceholders[containerIdx], labelPlaceholders[containerIdx]):         {lnt: podLabelNames, th: pth},
+		fmt.Sprintf(` * on (pod, namespace) group_left max(%s) by (namespace, pod, %s)) by (pod,namespace,%s)`, getOwnerQuery("kube_pod_owner", false), labelPlaceholders[containerIdx], labelPlaceholders[containerIdx]):    {lnt: podLabelNames, th: pth},
 		fmt.Sprintf(` * on (pod, namespace) group_left (owner_name,owner_kind) max(kube_pod_owner{}) by (namespace, pod, owner_name, owner_kind)) by (owner_kind,owner_name,namespace,%s)`, labelPlaceholders[containerIdx]): {lnt: fullOwnerLabelNames, th: &typeHolder{}},
 	}
 	if detectedOwnerTypes[common.Deployment] == true {
