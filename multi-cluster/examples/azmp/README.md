@@ -2,12 +2,12 @@
 
 ## Pre-requisites
 
-Steps 1 and 4 require a Linux environment with `bash` and the two utilities:
+The steps require a Linux environment with `bash` and the following utilities:
 
-* [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-* [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
-* [jq](https://jqlang.github.io/jq/)
-* base64 - pre-installed in most Linux distros as part of the `coreutils` package
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+- [jq](https://jqlang.github.io/jq/)
+- base64 - pre-installed in most Linux distros as part of the `coreutils` package
 
 ## Scope
 
@@ -15,7 +15,7 @@ Steps 1 and 4 require a Linux environment with `bash` and the two utilities:
 
 ### Remote-write from self-managed Prometheus
 
-If you opt to roll out your own Prometheus stack and use its [remote-write protocol to an Azure Monitor Workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/remote-write-prometheus), then follow the general instructions [here](../../../docs/metrics.md) as for which exporters to deploy (and which metrics to collect).
+If you opt to roll out your own Prometheus stack and use its [remote-write protocol to an Azure Monitor Workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/remote-write-prometheus), then follow the general instructions [here](../../../requirements.md) and [here](../../../docs/README.md) as for which exporters to deploy (and which metrics to collect).
 
 ### Prometheus Enabled AKS Cluster
 
@@ -39,23 +39,23 @@ Run the shell script using
 `./setup-azmp-aks-cluster.sh`
 and verify it completes successfully. The two steps of disabling Azure Monitor Metrics (if already enabled) and re-enabling these may take each up to a few minutes.
 
-## Get Azure Monitor Prometheus Workspace Details
+## Following Steps
 
-Now, go in the Azure Portal to `Monitor -> Managed Prometheus`, and select the relevant workspace.
+Get Azure Monitor Prometheus Workspace Details: go in the Azure Portal to `Monitor -> Managed Prometheus`, and select the relevant workspace.
 
 2. You'll see a `Query endpoint` value (ending with `prometheus.monitor.azure.com`). Copy it and paste it into `configmap.yaml` under `prometheus.url.host`. Save the file.
 
 3. You'll also see `JSON view`, click it and you'll see a `Resource ID` value. Copy it and paste it into [register-app-create-secret.sh](./register-app-create-secret.sh) as the value of `AZMON_WORKSPACE_RESOURCE_URI`. Save the file.
 
-## Register an Entra service principal and create secret
+### Register an Entra service principal and create secret
 
 In order to be able to run PromQL queries with Azure Managed Prometheus API, we need to register a Microsoft Entra (formerly Azure AD) service principal and give it the relevant role. This is described [here](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql) and [here](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/api/register-app-for-token?tabs=cli).
 
 4. You have already edited [register-app-create-secret.sh](./register-app-create-secret.sh) in step 3. This script:
 
-* creates the service principal
-* assigns to it the relevant role
-* creates a yaml file for a Kubernetes secret with the service principal ID
+- creates the service principal
+- assigns to it the relevant role
+- creates a yaml file for a Kubernetes secret with the service principal ID
 
 Run the shell script `register-app-create-secret.sh` and verify it completes successfully.
 
@@ -63,7 +63,7 @@ Run the shell script `register-app-create-secret.sh` and verify it completes suc
     
     `kubectl create -f azmon-secret.yaml -n <namespace>`
 
-## Proceed to deploy the forwarder
+### Proceed to deploy the forwarder
 
 6. You have already edited `configmap.yaml` with your AzMP workspace. Add your Densify instance and cluster identifiers to it.
 

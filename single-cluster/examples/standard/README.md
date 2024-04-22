@@ -1,4 +1,12 @@
+# Standard (in-cluster) Prometheus
+
 This example shows you how to setup the Data Forwarder to connect to a Prometheus server and send container data to Densify on an hourly basis. You need to edit the `configmap.yaml` file, then create the config map to pass the settings to `config.properties`. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
+
+## Pre-requisites
+
+All steps require [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+
+## Steps
 
 1. Modify `configmap.yaml` to point to your Densify instance and to the Prometheus server.
 

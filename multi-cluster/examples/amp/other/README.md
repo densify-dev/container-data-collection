@@ -1,3 +1,5 @@
+# On non-EKS Clusters
+
 This example shows you how to setup the Data Forwarder to run on a Kubernetes cluster not on AWS EKS, connect to Amazon Managed Prometheus (AMP) and send container data to Densify on an hourly basis.
 
 Not running on an AWS EKS cluster means we cannot make use of EKS ability to associate Kubernetes service accounts with AWS IAM roles. Therefore the Forwarder is not running under a service account, but the AWS credentials need to be provided to it.
@@ -8,11 +10,14 @@ Note: these instructions can be followed on an EKS cluster as well, though runni
 
 ## Pre-requisites
 
-Steps 1-6 require a Linux environment with `bash` and the following utilities:
+The steps require a Linux environment with `bash` and the following utilities:
 
-* [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html#getting-started-install-instructions)
-* [jq](https://jqlang.github.io/jq/)
-* base64 - pre-installed in most Linux distros as part of the `coreutils` package
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html#getting-started-install-instructions)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+- [jq](https://jqlang.github.io/jq/)
+- base64 - pre-installed in most Linux distros as part of the `coreutils` package
+
+## Steps
 
 The shell script needs to be edited as follows:
 
@@ -28,11 +33,11 @@ The shell script needs to be edited as follows:
 
 6. Run the script. This will:
 
-* create the user if required
-* create the policy if required
-* attach the above policy to user
-* create the AWS user config and credentials files based on the AWS region and the user's credentials
-* create a yaml file for a Kubernetes secret with the AWS config and credentials files
+- create the user if required
+- create the policy if required
+- attach the above policy to user
+- create the AWS user config and credentials files based on the AWS region and the user's credentials
+- create a yaml file for a Kubernetes secret with the AWS config and credentials files
 
 7. Now, create the AWS secret in Kubernetes.
     

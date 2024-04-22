@@ -1,19 +1,24 @@
+# On EKS Cluster
+
 This example shows you how to setup the Data Forwarder on an EKS cluster to connect to Amazon Managed Prometheus and send container data to Densify on an hourly basis. 
 
 Running on an AWS EKS cluster means we can make use of EKS ability to associate Kubernetes service accounts with AWS IAM roles. This means we can create a service account which will have (as a secret token) the relevant AWS credentials. This is the preferred way to work with AMP, as the credentials are less visible.
 
-The creation of the IAM policy, role and service account is done in steps 1-2. 
+The creation of the IAM policy, role and service account is done in steps 1-2.
 
 After this is completed successfully, we proceed to edit the `configmap.yaml` file, then create the config map to pass the settings to `config.yaml`. To test the Data Forwarder setup, create a pod to ensure that data is sent to Densify before enabling the cronjob to run data collection every hour.
 
 ## Pre-requisites
 
-Steps 1 and 2 require a Linux environment with `bash` and the two AWS utilities:
+The steps require a Linux environment with `bash` and the two AWS utilities:
 
-* [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html#getting-started-install-instructions)
-* [eksctl](https://eksctl.io/installation/#for-unix)
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html#getting-started-install-instructions)
+- [eksctl](https://eksctl.io/installation/#for-unix)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
 
 These steps have been tested with the versions `aws-cli/2.15.8` and `eksctl/0.167.0`.
+
+## Steps
 
 1. Follow the instructions [here](https://docs.aws.amazon.com/prometheus/latest/userguide/set-up-irsa.html#set-up-irsa-query) to set up IAM roles for querying AMP workspaces.
 
