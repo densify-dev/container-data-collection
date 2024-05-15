@@ -17,6 +17,9 @@ spec:
       capabilities:
         drop:
           - ALL
+    env:
+    - name: CONFIG_TYPE
+      value: "yaml"
     volumeMounts:
     - mountPath: /config
       name: config
@@ -25,6 +28,6 @@ spec:
     configMap:
       name: densifyconf
       items:
-        - key: config.properties
-          path: config.properties
+        - key: config.yaml
+          path: config.yaml
   restartPolicy: Never

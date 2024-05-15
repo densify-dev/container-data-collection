@@ -3,51 +3,42 @@ kind :  ConfigMap
 metadata :
   name :  densifyconf 
 data : 
-  config.properties : |
-    ###################################################################
-    # Densify Forwarder section
-    ###################################################################
-
-    host <instance>.densify.com
-    protocol https
-    port 443
-    endpoint /api/v2/
-
-    user <Densify user>
-    # password <password, or:>,
-    # epassword <encrypted password>
-
-    # will prepend this prefix in transferred zip files names
-    # prefix <zip file prefix>
-
-    ###################################################################
-    # Optional - Proxy section
-    # These setting are only applicable if <proxyhost> is defined
-    ###################################################################
-
-    # proxyhost <proxy.company.com>
-    # proxyport <proxy port, default: 443>
-    # proxyprotocol <http|https (default)>
-    # proxyauth <Basic (default)|NTLM>
-
-    # proxyuser <username>
-    # proxypassword <password, or:>
-    # eproxypassword <encrypted password>
-
-    # The following settings are used for NTLM authentication:
-    # proxyserver <server name>
-    # proxydomain <domain>
-
-    ###################################################################
-    # Prometheus section
-    ###################################################################
-
-    prometheus_address <Prometheus hostname, in-cluster it's recommended to use the internal service name (i.e. service_name.namespace)>
-    prometheus_port <Prometheus port, default: 9090>
-    # prometheus_protocol <http (default)|https>
-    # prometheus_user <Prometheus basic auth username, or name of file containing this info>
-    # prometheus_password <Prometheus basic auth password, or name of file containing this info>
-
+  config.yaml : |
+    forwarder:
+        densify:
+            url:
+                scheme: https
+                host: <instance>.densify.com
+                port: 443
+                username: <Densify user>
+    #            password: <plaintext Densify password, or:>
+    #            encrypted_password: <encrypted Densify password>
+            endpoint: /api/v2/
+    # the entire retry section is optional, if omitted then the default values below are used
+    #        retry:
+    #            wait_min: 1 # in seconds
+    #            wait_max: 30 # in seconds
+    #            max_attempts: 4
+    #            policy: default # valid values: default (same as exponential), exponential, jitter
+    #    proxy:
+    #        url:
+    #            scheme: https
+    #            host: proxy.company.com
+    #            port: 443
+    #            username: <proxy user>
+    #            password: <plaintext proxy password, or:>
+    #            encrypted_password: <encrypted proxy password>
+    #        auth: <Basic (default)|NTLM>
+    #        server: <proxy server, required for NTLM>
+    #        domain: <proxy domain, required for NTLM>
+    #    prefix: <zip file prefix>
+    prometheus:
+        url:
+            scheme: <http (default)|https>
+            host: <Prometheus hostname>
+            port: <Prometheus port|9090 (default)>
+    #        username: <Prometheus basic auth username / name of file containing this info>
+    #        password: <Prometheus basic auth password / name of file containing this info>
     # Bearer token can be used for a number of solutions supporting Prometheus-API.
     # It is required by OpenShift Monitoring (which deploys Prometheus itself), see:
     # https://access.redhat.com/documentation/en-us/openshift_container_platform/4.14/html/monitoring/accessing-third-party-monitoring-apis
@@ -55,26 +46,38 @@ data :
     # https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql
     # The value of this parameter may be either the token itself or a name of file containing it.
     # Example (using k8s service account token):
-
-    prometheus_oauth_token /var/run/secrets/kubernetes.io/serviceaccount/token
-    ca_certificate /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
-
-    ###################################################################
-    # Collection section
-    ###################################################################
-
-    cluster_name <cluster name>
-    # interval <days|hours (default)|minutes>
-    # interval_size 1
-    # history 1
-    # offset is the amount of units (based on interval value) to offset the data collection backwards in time
-    # offset 0
-    # sample_rate 5
-    # include_list container,node,cluster,nodegroup,quota
-    # node_group_list label_cloud_google_com_gke_nodepool,label_eks_amazonaws_com_nodegroup,label_agentpool,label_pool_name,label_alpha_eksctl_io_nodegroup_name,label_kops_k8s_io_instancegroup
-
-    ###################################################################
-    # Miscellaneous
-    ###################################################################
-
-    # debug <true|false>
+        bearer_token: /var/run/secrets/kubernetes.io/serviceaccount/token
+        ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+    #    sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
+    #        region: <AWS region, mandatory>
+    #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
+    #         (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-ingest-metrics.html#AMP-quick-new-Prometheus-IRSA)
+    #        access_key: <AWS access key>
+    #        secret_key: <AWS secret key>
+    #        profile: <AWS profile>
+    #        role_arn: <AWS role ARN>
+    # the entire retry section is optional, if omitted then the default values below are used
+    #    retry:
+    #        wait_min: 1 # in seconds
+    #        wait_max: 30 # in seconds
+    #        max_attempts: 4
+    #        policy: default # valid values: default (same as exponential), exponential, jitter
+    collection:
+    # the include section is optional, if omitted or empty then all entity types are included
+    #    include:
+    #        cluster: true
+    #        container: true
+    #        node: true
+    #        nodegroup: true
+    #        quota: true
+    #    interval: <days|hours (default)|minutes>
+    #    interval_size: 1
+    #    history: 1
+    #    offset: 0
+    #    sample_rate: 5
+    #    node_group_list: label_cloud_google_com_gke_nodepool,label_eks_amazonaws_com_nodegroup,label_agentpool,label_pool_name,label_alpha_eksctl_io_nodegroup_name,label_kops_k8s_io_instancegroup
+    clusters:
+        - name: <cluster name>
+    #   # no identifiers in a single cluster configuration
+    #
+    # debug: <true|false (default)>

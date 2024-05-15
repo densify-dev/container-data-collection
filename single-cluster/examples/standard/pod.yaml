@@ -7,6 +7,9 @@ spec:
   - image: densify/container-optimization-data-forwarder:4-beta
     imagePullPolicy: Always
     name: data-forwarder
+    env:
+    - name: CONFIG_TYPE
+      value: "yaml"
     volumeMounts:
     - mountPath: /config
       name: config
@@ -15,6 +18,6 @@ spec:
     configMap:
       name: densifyconf
       items:
-        - key: config.properties
-          path: config.properties
+        - key: config.yaml
+          path: config.yaml
   restartPolicy: Never

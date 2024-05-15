@@ -1,14 +1,16 @@
-# Configuration 
+# Configuration
 
-Use this [config.properties](https://github.com/densify-dev/container-config/blob/main/examples/config.properties) file or this [config.yaml](https://github.com/densify-dev/container-config/blob/main/examples/config.yaml) file (with a single cluster with no identifiers) as a template.
+Use this [config.yaml](https://github.com/densify-dev/container-config/blob/main/examples/config.yaml) file (with a single cluster with no identifiers) as a template.
 
-# Configuration Variables
+> **_NOTE:_**  V4 of Densify Container Data Collection is backwards-compatible and has full support for the **properties** format of the config map of versions 1-3. However, new features introduced in V4 are configurable using **yaml** format only, and new config maps should be created only using **yaml** format. The **properties** format will be removed in a feature release.
+
+## Configuration Variables
 
 The following tables provide the parameter names and default values for the variables used to configure the data forwarder.
 
 The order of precedence is: command line flags, environment variables, config file (typically provided as a config map).
 
-## Variable Names Data Collection
+### Variable Names Data Collection
 
 As of version 4.0.0, for data collection the same parameter name is used for all three configuration sources (for environment variables in CAPS).
 
@@ -36,7 +38,7 @@ As of version 4.0.0, for data collection the same parameter name is used for all
 
 [^1]: The parameters specifying the config file are only available as command line flags and environment variables, these cannot be present inside the config file itself.
 
-## Variable Names Forwarder
+### Variable Names Forwarder
 
 As of version 4.0.0, for the forwarder the same parameter name is used for all three configuration sources (for environment variables in CAPS and with the prefix `DENSIFY_`).
 
