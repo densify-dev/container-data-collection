@@ -2,7 +2,7 @@
 
 Use this [config.yaml](https://github.com/densify-dev/container-config/blob/main/examples/config.yaml) file (with a single cluster with no identifiers) as a template.
 
-> **_NOTE:_**  V4 of Densify Container Data Collection is backwards-compatible and has full support for the **properties** format of the config map of versions 1-3. However, new features introduced in V4 are configurable using **yaml** format only, and new config maps should be created only using **yaml** format. The **properties** format will be removed in a feature release.
+> **_NOTE:_**  V4 of Densify Container Data Collection is backwards-compatible and has full support for the deprecated **properties** format of the config map of versions 1-3. However, new features introduced in V4 are configurable using **yaml** format only, and new config maps should be created only using **yaml** format. The **properties** format will be removed in a feature release.
 
 ## Configuration Variables
 
