@@ -4,7 +4,7 @@
 
 1.  Remote-write from self-managed Prometheus - in this case you deploy your own Prometheus stack and use its remote-write capabilities. See [remote-write protocol to an Azure Monitor Workspace](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/remote-write-prometheus) for configuration details.
 
-	You must also follow the [general instructions](../../../requirements.md) to deploy the required exporters. Ensure that all of the metrics, required by Densify, are being collected. See [Prometheus Metrics](../../../docs).
+	You must also follow the [general instructions](../../../requirements.md) to deploy the required exporters. Ensure that all of the metrics, required by Densify, are being collected. See [Required Prometheus Metrics](../../../docs).
 
 2.  Prometheus-Enabled AKS Cluster - Azure allows you to enable metrics collection from your AKS cluster and send these to your Azure Monitor Prometheus workspace.
 
