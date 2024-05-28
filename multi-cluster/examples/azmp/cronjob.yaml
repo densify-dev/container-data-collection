@@ -26,7 +26,7 @@ spec:
             - mountPath: /home/densify/.tokens
               name: tokens
           containers:
-          - image: densify/container-optimization-data-forwarder:4-beta
+          - image: densify/container-optimization-data-forwarder:4
             imagePullPolicy: Always
             name: data-forwarder
             env:

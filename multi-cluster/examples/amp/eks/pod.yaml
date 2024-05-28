@@ -6,7 +6,7 @@ spec:
   serviceAccountName: amp-iamproxy-query-service-account
   containers:
   - name: data-forwarder
-    image: densify/container-optimization-data-forwarder:4-beta
+    image: densify/container-optimization-data-forwarder:4
     imagePullPolicy: Always
     env:
     - name: CONFIG_TYPE

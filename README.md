@@ -40,7 +40,7 @@ In this configuration, data is collected from multiple Kubernetes clusters monit
 
 ## Docker images
 
-The Docker image is available on [Docker hub](https://hub.docker.com/r/densify/container-optimization-data-forwarder/tags). Pull it using `docker pull densify/container-optimization-data-forwarder:4-beta`.
+The Docker image is available on [Docker hub](https://hub.docker.com/r/densify/container-optimization-data-forwarder/tags). Pull it using `docker pull densify/container-optimization-data-forwarder:4`.
 
 ## License
 
