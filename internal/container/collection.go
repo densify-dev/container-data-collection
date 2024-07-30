@@ -133,7 +133,7 @@ func getOwner(cluster, nsName string, ns *namespace, objId *objectId) (obj *k8sO
 	return
 }
 
-func getContainer(cluster string, ss *model.SampleStream) (c *container, ok bool) {
+func getContainer(cluster string, ss *model.SampleStream) (c *container, cwp *containerWorkloadProducer, ok bool) {
 	var nsName, podName, containerName string
 	if clh, f := clusterLabelHolders[cluster]; f {
 		nsName, podName, containerName, ok = clh.values(ss)
@@ -152,7 +152,9 @@ func getContainer(cluster string, ss *model.SampleStream) (c *container, ok bool
 			podId := &objectId{kind: common.Pod, name: podName}
 			var owner *k8sObject
 			if owner, ok = getOwner(cluster, nsName, ns, podId); ok {
-				c, ok = owner.containers[containerName]
+				if c, ok = owner.containers[containerName]; ok {
+					cwp = &containerWorkloadProducer{cluster: cluster, nsName: nsName, obj: owner, c: c}
+				}
 			}
 		}
 	}
@@ -161,7 +163,7 @@ func getContainer(cluster string, ss *model.SampleStream) (c *container, ok bool
 
 func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) {
 	for _, ss := range result {
-		c, ok := getContainer(cluster, ss)
+		c, cwp, ok := getContainer(cluster, ss)
 		if !ok {
 			continue
 		}
@@ -173,15 +175,19 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			switch resource {
 			case common.Memory:
 				c.memLimit = common.IntMiB(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.MemoryLimits, ss, common.MiB[float64])
 			case common.Cpu:
 				c.cpuLimit = common.IntMCores(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
 			}
 		case common.Requests:
 			switch resource {
 			case common.Memory:
 				c.memRequest = common.IntMiB(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.MemoryRequests, ss, common.MiB[float64])
 			case common.Cpu:
 				c.cpuRequest = common.IntMCores(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)
@@ -189,12 +195,16 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
 		case common.CpuRequest:
 			c.cpuRequest = common.IntMCores(value)
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 		case common.MemLimit:
 			c.memLimit = common.IntMiB(value)
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.MemoryLimits, ss, common.MiB[float64])
 		case common.MemRequest:
 			c.memRequest = common.IntMiB(value)
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 		case restarts:
 			c.restarts = intValue
 		case powerSt:
@@ -205,11 +215,9 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 
 func getContainerMetricString(cluster string, result model.Matrix) {
 	for _, ss := range result {
-		c, ok := getContainer(cluster, ss)
-		if !ok {
-			continue
+		if c, _, ok := getContainer(cluster, ss); ok {
+			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 		}
-		addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 	}
 }
 
@@ -288,20 +296,8 @@ func (omh *objectMetricHolder) getObjectMetric(cluster string, result model.Matr
 		case common.CurrentSizeName:
 			// need to set the maximum value
 			obj.currentSize = int(int64Value)
-			if objWorkloadWriters[omh.metric][cluster] == nil {
-				if file, err := os.Create(common.GetFileName(cluster, common.ContainerEntityKind, omh.metric)); err == nil {
-					hf, _ := common.GetCsvHeaderFormat(common.ContainerEntityKind)
-					if _, err = fmt.Fprintf(file, hf, common.CurrentSize.GetMetricName()); err == nil {
-						objWorkloadWriters[omh.metric][cluster] = file
-					} else {
-						common.LogError(err, common.DefaultLogFormat, cluster, common.ContainerEntityKind)
-						_ = file.Close()
-					}
-				} else {
-					common.LogError(err, common.DefaultLogFormat, cluster, common.ContainerEntityKind)
-				}
-			}
-			_ = writeObjWorkload(omh.metric, cluster, nsName, obj, ss.Values) // error already handled
+			cwp := &containerWorkloadProducer{cluster: cluster, nsName: nsName, obj: obj}
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.CurrentSize, ss, nil)
 		case createTime:
 			obj.createTime = time.Unix(int64Value, 0)
 		default:
@@ -680,4 +676,50 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
 			}
 		}
 	}
+}
+
+type containerWorkloadProducer struct {
+	cluster string
+	nsName  string
+	obj     *k8sObject
+	c       *container
+}
+
+func (cwp *containerWorkloadProducer) GetCluster() string {
+	return cwp.cluster
+}
+
+func (cwp *containerWorkloadProducer) GetEntityKind() string {
+	return common.ContainerEntityKind
+}
+
+func (cwp *containerWorkloadProducer) GetRowPrefixes() (rps []string) {
+	if cwp.c == nil {
+		for cName := range cwp.obj.containers {
+			rps = append(rps, cwp.getRowPrefix(cName))
+		}
+	} else {
+		rps = append(rps, cwp.getRowPrefix(cwp.c.name))
+	}
+	return
+}
+
+func (cwp *containerWorkloadProducer) ShouldWrite(metric string) bool {
+	if cwp.c == nil {
+		return true
+	}
+	var f bool
+	var w map[*container]bool
+	if w, f = written[metric]; f {
+		f = w[cwp.c]
+	} else {
+		w = make(map[*container]bool)
+		written[metric] = w
+	}
+	w[cwp.c] = true
+	return !f
+}
+
+func (cwp *containerWorkloadProducer) getRowPrefix(cName string) string {
+	return fmt.Sprintf("%s,%s,%s,%s,%s", cwp.cluster, cwp.nsName, cwp.obj.name, getOwnerKindValue(cwp.obj.kind), common.ReplaceColons(cName))
 }

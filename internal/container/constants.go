@@ -1,12 +1,14 @@
 package container
 
-import "github.com/densify-dev/container-data-collection/internal/common"
+import (
+	"github.com/densify-dev/container-data-collection/internal/common"
+)
 
 const (
-	idSep          = "__"
-	powerSt        = "powerState"
-	restarts       = "restarts"
-	notFoundFormat = common.ClusterFormat + " - no %s found"
+	idSep               = "__"
+	powerSt             = "powerState"
+	restarts            = "restarts"
+	noOwnersFoundFormat = common.ClusterFormat + " - no %s owners found"
 )
 
 const (

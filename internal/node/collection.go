@@ -1,6 +1,7 @@
 package node
 
 import (
+	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/prometheus/common/model"
 )
@@ -46,6 +47,7 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 		}
 		value := common.LastValue(ss)
 		res := ss.Metric[common.Resource]
+		nwp := &nodeWorkloadProducer{cluster: cluster, node: n}
 		switch mh.name {
 		case common.Capacity:
 			switch res {
@@ -91,24 +93,32 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			switch res {
 			case common.Cpu:
 				setValue(&n.cpuLimit, common.MCores(value))
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
 			case common.Memory:
 				setValue(&n.memLimit, common.MiB(value))
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryLimits, ss, common.MiB[float64])
 			}
 		case common.Requests:
 			switch res {
 			case common.Cpu:
 				setValue(&n.cpuRequest, common.MCores(value))
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 			case common.Memory:
 				setValue(&n.memRequest, common.MiB(value))
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, common.MiB[float64])
 			}
 		case common.CpuLimit:
 			setValue(&n.cpuLimit, value)
+			common.WriteWorkload(nwp, nodeWorkloadWriters, common.CpuLimits, ss, nil)
 		case common.CpuRequest:
 			setValue(&n.cpuRequest, value)
+			common.WriteWorkload(nwp, nodeWorkloadWriters, common.CpuRequests, ss, nil)
 		case common.MemLimit:
 			setValue(&n.memLimit, value)
+			common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryLimits, ss, nil)
 		case common.MemRequest:
 			setValue(&n.memRequest, value)
+			common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, nil)
 		}
 	}
 }
@@ -124,4 +134,25 @@ func getNodeMetricString(cluster string, result model.Matrix) {
 			common.AddToLabelMap(string(key), string(value), n.labelMap)
 		}
 	}
+}
+
+type nodeWorkloadProducer struct {
+	cluster string
+	node    *node
+}
+
+func (nwp *nodeWorkloadProducer) GetCluster() string {
+	return nwp.cluster
+}
+
+func (nwp *nodeWorkloadProducer) GetEntityKind() string {
+	return common.NodeEntityKind
+}
+
+func (nwp *nodeWorkloadProducer) GetRowPrefixes() []string {
+	return []string{fmt.Sprintf("%s,%s", nwp.cluster, nwp.node.name)}
+}
+
+func (nwp *nodeWorkloadProducer) ShouldWrite(_ string) bool {
+	return true
 }

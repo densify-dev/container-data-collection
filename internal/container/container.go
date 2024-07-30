@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/prometheus/common/model"
-	"os"
 	"strings"
 	"time"
 )
@@ -172,16 +171,18 @@ var (
 	hpaTypeHolders = []*typeHolder{hpath, oldhpath}
 )
 
-var detectedOwnerTypes = make(map[string]bool)
+var detectedOwnedTypes = make(map[string]bool)
 
+/*
 type ownedTypeHolder struct {
 	ownedType *typeHolder
 	ownerType string
 }
+*/
 
 var ownerLabelNames = []string{ownerKind, ownerName}
 
-func (oth *ownedTypeHolder) getOwners(cluster string, result model.Matrix) {
+func (th *typeHolder) getOwners(cluster string, result model.Matrix) {
 	var co clusterOwnerships
 	var f bool
 	if co, f = ownerships[cluster]; !f {
@@ -197,7 +198,7 @@ func (oth *ownedTypeHolder) getOwners(cluster string, result model.Matrix) {
 		// don't pass cluster name as the cluster is not populated yet and we don't need the namespace
 		if nsName, _, values, ok := getNamespaceAndValues(ownerLabelNames, common.Empty, ss); ok {
 			owShip := newOwnership(values[ownerKind], values[ownerName])
-			ownedId := oth.ownedType.getObjectId(ss)
+			ownedId := th.getObjectId(ss)
 			ownedKey := ownedId.Key(nsName)
 			co[ownedKey] = owShip
 			if isRelevant(cluster, nsName, ownedId) {
@@ -205,12 +206,10 @@ func (oth *ownedTypeHolder) getOwners(cluster string, result model.Matrix) {
 			}
 		}
 	}
-	if oth.ownerType != common.Empty {
-		if len(co) == 0 {
-			common.LogCluster(1, common.Info, notFoundFormat, cluster, true, cluster, common.Plural(oth.ownerType))
-		} else {
-			detectedOwnerTypes[oth.ownerType] = true
-		}
+	if len(co) == 0 {
+		common.LogCluster(1, common.Info, noOwnersFoundFormat, cluster, true, cluster, common.Plural(th.typeName))
+	} else {
+		detectedOwnedTypes[th.typeName] = true
 	}
 }
 
@@ -331,17 +330,14 @@ func Metrics() {
 	common.DebugLogMemStats(1, "container data collection")
 	// queries to gather hierarchy information for containers
 	query = fmt.Sprintf(`sum(%s) by (namespace, pod, owner_name, owner_kind)`, getOwnerQuery("kube_pod_owner", true))
-	oth := &ownedTypeHolder{ownedType: pth}
-	if n, err = common.CollectAndProcessMetric(query, range5Min, oth.getOwners); err != nil || n == 0 {
+	if n, err = common.CollectAndProcessMetric(query, range5Min, pth.getOwners); err != nil || n == 0 {
 		// error already handled
 		return
 	}
 	query = fmt.Sprintf(`sum(%s) by (namespace, replicaset, owner_name, owner_kind)`, getOwnerQuery("kube_replicaset_owner", true))
-	oth = &ownedTypeHolder{ownedType: rsth, ownerType: common.Deployment}
-	_, _ = common.CollectAndProcessMetric(query, range5Min, oth.getOwners)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, rsth.getOwners)
 	query = fmt.Sprintf(`sum(%s) by (namespace, job_name, owner_name, owner_kind)`, getOwnerQuery("kube_job_owner", true))
-	oth = &ownedTypeHolder{ownedType: jth, ownerType: common.CronJob}
-	_, _ = common.CollectAndProcessMetric(query, range5Min, oth.getOwners)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, jth.getOwners)
 	query = `max(kube_pod_container_info{}) by (container, pod, namespace)`
 	if n, err = common.CollectAndProcessMetric(query, range5Min, addContainerAndOwners); err != nil || n == 0 {
 		// error already handled
@@ -350,6 +346,8 @@ func Metrics() {
 
 	// container metrics
 	common.DebugLogObjectMemStats(common.Container)
+	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests)
+
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
@@ -520,7 +518,6 @@ func Metrics() {
 
 	// current size workloads
 	common.DebugLogObjectMemStats(common.CurrentSizeName)
-	objWorkloadWriters[common.CurrentSizeName] = make(map[string]*os.File)
 	mh.metric = common.CurrentSizeName
 	omh.typeHolder = rsth
 	query = `kube_replicaset_spec_replicas{}`
@@ -544,35 +541,26 @@ func Metrics() {
 	query = `max(max(kube_replicaset_spec_replicas{}) by (namespace,replicaset) * on (namespace,replicaset) group_right max(kube_replicaset_owner{}) by (namespace, replicaset, owner_name)) by (owner_name, namespace)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 
-	for cluster, file := range objWorkloadWriters[common.CurrentSizeName] {
-		if err = file.Close(); err != nil {
-			common.LogError(err, common.DefaultLogFormat, cluster, common.ContainerEntityKind)
-		}
-	}
-	delete(objWorkloadWriters, common.CurrentSizeName)
+	containerWorkloadWriters.CloseAndClearWorkloadWriters(common.ContainerEntityKind)
+	clear(written)
 
 	writeConfig()
 	writeAttributes()
 
 	// container workloads
 	common.DebugLogObjectMemStats(common.JoinSpace(common.Container, common.Workload))
+	foqpb := &queryProcessorBuilder{lnt: fullOwnerLabelNames, th: &typeHolder{}}
 	groupClauses := map[string]*queryProcessorBuilder{
 		fmt.Sprintf(` * on (pod, namespace) group_left max(%s) by (namespace, pod, %s)) by (pod,namespace,%s)`, getOwnerQuery("kube_pod_owner", false), labelPlaceholders[containerIdx], labelPlaceholders[containerIdx]):    {lnt: podLabelNames, th: pth},
-		fmt.Sprintf(` * on (pod, namespace) group_left (owner_name,owner_kind) max(kube_pod_owner{}) by (namespace, pod, owner_name, owner_kind)) by (owner_kind,owner_name,namespace,%s)`, labelPlaceholders[containerIdx]): {lnt: fullOwnerLabelNames, th: &typeHolder{}},
+		fmt.Sprintf(` * on (pod, namespace) group_left (owner_name,owner_kind) max(kube_pod_owner{}) by (namespace, pod, owner_name, owner_kind)) by (owner_kind,owner_name,namespace,%s)`, labelPlaceholders[containerIdx]): foqpb,
 	}
-	if detectedOwnerTypes[common.Deployment] == true {
-		grClauseDeployment := fmt.Sprintf(` * on (pod, namespace) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace, pod, replicaset) * on (replicaset, namespace) group_left (owner_name) max(kube_replicaset_owner{owner_kind="Deployment"}) by (namespace, replicaset, owner_name)) by (owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
-		groupClauses[grClauseDeployment] = &queryProcessorBuilder{
-			lnt: typeOwnerLabelNames,
-			th:  donth,
-		}
+	if detectedOwnedTypes[common.ReplicaSet] == true {
+		grClauseReplicaSet := fmt.Sprintf(` * on (pod, namespace) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace, pod, replicaset) * on (replicaset, namespace) group_left (owner_kind, owner_name) max(kube_replicaset_owner{}) by (namespace, replicaset, owner_kind, owner_name)) by (owner_kind, owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
+		groupClauses[grClauseReplicaSet] = foqpb
 	}
-	if detectedOwnerTypes[common.CronJob] == true {
-		grClauseCronJob := fmt.Sprintf(` * on (pod, namespace) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace, pod, job) * on (job, namespace) group_left (owner_name) max(label_replace(kube_job_owner{owner_kind="CronJob"}, "job", "$1", "job_name", "(.*)")) by (namespace, job, owner_name)) by (owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
-		groupClauses[grClauseCronJob] = &queryProcessorBuilder{
-			lnt: typeOwnerLabelNames,
-			th:  cjonth,
-		}
+	if detectedOwnedTypes[common.Job] == true {
+		grClauseJob := fmt.Sprintf(` * on (pod, namespace) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace, pod, job) * on (job, namespace) group_left (owner_kind, owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace, job, owner_kind, owner_name)) by (owner_kind, owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
+		groupClauses[grClauseJob] = foqpb
 	}
 	wq := &workloadQuery{
 		metricName:   common.CamelCase(common.Cpu, common.MCoresSt),
@@ -603,6 +591,17 @@ func Metrics() {
 	wq.metricName = common.Disk
 	wq.aggregators[common.Avg] = common.Empty
 	wq.baseQuery = fmt.Sprintf(`max(container_fs_usage_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	getWorkload(wq)
+
+	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Percent)
+	wq.baseQuery = fmt.Sprintf(`sum((round(increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm])) == 0) or (100 * round(increase(container_cpu_cfs_throttled_periods_total{name!~"k8s_POD_.*"}[%dm])) / round(increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm])))) by (instance,%s,namespace,%s)`,
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	getWorkload(wq)
+
+	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Seconds)
+	wq.aggregators = map[string]string{common.Sum: common.Empty}
+	wq.baseQuery = fmt.Sprintf(`sum(increase(container_cpu_cfs_throttled_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,%s,namespace,%s)`,
+		common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
 	wq.metricName = restarts

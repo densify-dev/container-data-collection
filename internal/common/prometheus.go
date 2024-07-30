@@ -17,7 +17,7 @@ import (
 )
 
 // CollectMetric is used to query Prometheus to get data for specific query and return the results to be processed
-func CollectMetric(callDepth int, query string, promRange v1.Range) (crm ClusterResultMap, n int, err error) {
+func CollectMetric(callDepth int, query string, promRange *v1.Range) (crm ClusterResultMap, n int, err error) {
 	cle := getClusterLabelsEmbedder(query)
 	var qry string
 	if qry, err = cle.embedClusterLabels(query); err != nil {
@@ -37,7 +37,15 @@ func CollectMetric(callDepth int, query string, promRange v1.Range) (crm Cluster
 				_ = time.AfterFunc(2*time.Minute, func() { cancel() })
 				var value model.Value
 				var e error
-				value, _, e = pa.QueryRange(ctx, q, promRange)
+				switch getApiCall(promRange) {
+				case ApiQuery:
+					value, _, e = pa.Query(ctx, q, promRange.End)
+				case ApiQueryRange:
+					value, _, e = pa.QueryRange(ctx, q, *promRange)
+				case ApiQueryExemplars:
+					// no use for exemplars yet, just for completeness
+					_, e = pa.QueryExemplars(ctx, q, promRange.Start, promRange.End)
+				}
 				failOnConnectionError(e)
 				m := qlf.filterValue(cluster, q, value, e)
 				if crm, err = Merge(crm, m, Fail); err != nil {
@@ -63,7 +71,8 @@ func CheckPrometheusUp() (n int) {
 	_ = time.AfterFunc(2*time.Minute, func() { cancel() })
 	if pa, err = promApi(Empty); err == nil {
 		var value model.Value
-		if value, _, err = pa.QueryRange(ctx, "max(up)", TimeRange()); err == nil {
+		tr := TimeRange()
+		if value, _, err = pa.QueryRange(ctx, "max(up)", *tr); err == nil {
 			if mat, ok := value.(model.Matrix); ok {
 				for _, ss := range mat {
 					for _, v := range ss.Values {
@@ -228,28 +237,68 @@ func promApi(cluster string) (v1.API, error) {
 }
 
 // TimeRange allows you to define the start and end values of the range will pass to the Prometheus for the query
-func TimeRange() (promRange v1.Range) {
-	var d time.Duration
-	return TimeRangeForInterval(d)
+func TimeRange() (promRange *v1.Range) {
+	return TimeRangeForInterval(0)
 }
 
-func TimeRangeForInterval(historyInterval time.Duration) (promRange v1.Range) {
+func TimeRangeForInterval(historyInterval time.Duration) (promRange *v1.Range) {
+	return timeRangeForInterval(historyInterval, ApiQueryRange)
+}
+
+func EndTimeOnly() (promRange *v1.Range) {
+	return timeRangeForInterval(0, ApiQuery)
+}
+
+func timeRangeForInterval(historyInterval time.Duration, target PrometheusApiCall) (promRange *v1.Range) {
 	var start, end time.Time
+	var step time.Duration
 	// for workload metrics the historyInterval will be set depending on how far back in history we are querying currently
 	// note it will be 0 for all queries that are not workload related.
 	intervalSize := time.Duration(Params.Collection.IntervalSize)
+	if target != ApiQuery {
+		switch Params.Collection.Interval {
+		case Days:
+			start = CurrentTime.Add(time.Hour * -24 * intervalSize).Add(time.Hour * -24 * intervalSize * historyInterval)
+		case Hours:
+			start = CurrentTime.Add(time.Hour * -1 * intervalSize).Add(time.Hour * -1 * intervalSize * historyInterval)
+		default:
+			start = CurrentTime.Add(time.Minute * -1 * intervalSize).Add(time.Minute * -1 * intervalSize * historyInterval)
+		}
+		step = time.Minute * time.Duration(Params.Collection.SampleRate)
+	}
 	switch Params.Collection.Interval {
 	case Days:
-		start = CurrentTime.Add(time.Hour * -24 * intervalSize).Add(time.Hour * -24 * intervalSize * historyInterval)
 		end = CurrentTime.Add(time.Hour * -24 * intervalSize * historyInterval)
 	case Hours:
-		start = CurrentTime.Add(time.Hour * -1 * intervalSize).Add(time.Hour * -1 * intervalSize * historyInterval)
 		end = CurrentTime.Add(time.Hour * -1 * intervalSize * historyInterval)
 	default:
-		start = CurrentTime.Add(time.Minute * -1 * intervalSize).Add(time.Minute * -1 * intervalSize * historyInterval)
 		end = CurrentTime.Add(time.Minute * -1 * intervalSize * historyInterval)
 	}
-	return v1.Range{Start: start, End: end, Step: time.Minute * time.Duration(Params.Collection.SampleRate)}
+	return &v1.Range{Start: start, End: end, Step: step}
+}
+
+type PrometheusApiCall uint
+
+const (
+	_ PrometheusApiCall = iota
+	ApiQuery
+	ApiQueryRange
+	ApiQueryExemplars
+)
+
+func getApiCall(promRange *v1.Range) (pac PrometheusApiCall) {
+	if promRange != nil {
+		if promRange.Start.IsZero() {
+			pac = ApiQuery
+		} else {
+			if promRange.Step == 0 {
+				pac = ApiQueryExemplars
+			} else {
+				pac = ApiQueryRange
+			}
+		}
+	}
+	return
 }
 
 var (

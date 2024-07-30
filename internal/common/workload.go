@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+type NameType uint
+
+const (
+	MetricName NameType = iota
+	FileName
+)
+
 type WorkloadMetricHolder struct {
 	fileName, metricName string
 }
@@ -34,6 +41,19 @@ func (wmh *WorkloadMetricHolder) GetFileName() string {
 	return wmh.fileName
 }
 
+func (wmh *WorkloadMetricHolder) GetName(nt NameType, singular bool) (name string) {
+	switch nt {
+	case MetricName:
+		name = wmh.GetMetricName()
+	case FileName:
+		name = wmh.GetFileName()
+	}
+	if singular {
+		name = Singular(name)
+	}
+	return
+}
+
 func (wmh *WorkloadMetricHolder) GetWorkload(query string, metricField []model.LabelName, entityKind string) {
 	GetWorkload(2, wmh.fileName, wmh.metricName, query, metricField, entityKind)
 }
@@ -44,27 +64,34 @@ func (wmh *WorkloadMetricHolder) GetWorkloadQueryVariants(callDepth int, qps map
 
 // common WorkloadMetricHolder structs
 var (
-	CpuUtilization       = NewWorkloadMetricHolder(Cpu, Utilization)
-	MemoryBytes          = NewWorkloadMetricHolder(Memory, Bytes).OverrideFileName(Memory, Raw, Bytes)
-	MemoryActualWorkload = NewWorkloadMetricHolder(Memory, Actual, Workload)
-	DiskReadBytes        = NewWorkloadMetricHolder(Disk, Read, Bytes)
-	DiskWriteBytes       = NewWorkloadMetricHolder(Disk, Write, Bytes)
-	DiskTotalBytes       = NewWorkloadMetricHolder(Disk, Total, Bytes)
-	DiskReadOps          = NewWorkloadMetricHolder(Disk, Read, Ops)
-	DiskWriteOps         = NewWorkloadMetricHolder(Disk, Write, Ops)
-	DiskTotalOps         = NewWorkloadMetricHolder(Disk, Total, Ops)
-	NetReceivedBytes     = NewWorkloadMetricHolder(Net, Received, Bytes)
-	NetSentBytes         = NewWorkloadMetricHolder(Net, Sent, Bytes)
-	NetTotalBytes        = NewWorkloadMetricHolder(Net, Total, Bytes)
-	NetReceivedPackets   = NewWorkloadMetricHolder(Net, Received, Packets)
-	NetSentPackets       = NewWorkloadMetricHolder(Net, Sent, Packets)
-	NetTotalPackets      = NewWorkloadMetricHolder(Net, Total, Packets)
-	CurrentSize          = NewWorkloadMetricHolder(Current, Size)
-	CpuLimits            = NewWorkloadMetricHolder(Cpu, Limits)
-	CpuRequests          = NewWorkloadMetricHolder(Cpu, Requests)
-	MemLimits            = NewWorkloadMetricHolder(Mem, Limits)
-	MemRequests          = NewWorkloadMetricHolder(Mem, Requests)
-	PodsLimits           = NewWorkloadMetricHolder(Pods, Limits).OverrideFileName(Pods)
+	CpuUtilization           = NewWorkloadMetricHolder(Cpu, Utilization)
+	MemoryBytes              = NewWorkloadMetricHolder(Memory, Bytes).OverrideFileName(Memory, Raw, Bytes)
+	MemoryActualWorkload     = NewWorkloadMetricHolder(Memory, Actual, Workload)
+	DiskReadBytes            = NewWorkloadMetricHolder(Disk, Read, Bytes)
+	DiskWriteBytes           = NewWorkloadMetricHolder(Disk, Write, Bytes)
+	DiskTotalBytes           = NewWorkloadMetricHolder(Disk, Total, Bytes)
+	DiskReadOps              = NewWorkloadMetricHolder(Disk, Read, Ops)
+	DiskWriteOps             = NewWorkloadMetricHolder(Disk, Write, Ops)
+	DiskTotalOps             = NewWorkloadMetricHolder(Disk, Total, Ops)
+	NetReceivedBytes         = NewWorkloadMetricHolder(Net, Received, Bytes)
+	NetSentBytes             = NewWorkloadMetricHolder(Net, Sent, Bytes)
+	NetTotalBytes            = NewWorkloadMetricHolder(Net, Total, Bytes)
+	NetReceivedPackets       = NewWorkloadMetricHolder(Net, Received, Packets)
+	NetSentPackets           = NewWorkloadMetricHolder(Net, Sent, Packets)
+	NetTotalPackets          = NewWorkloadMetricHolder(Net, Total, Packets)
+	CurrentSize              = NewWorkloadMetricHolder(Current, Size)
+	CpuLimits                = NewWorkloadMetricHolder(Cpu, Limits)
+	CpuRequests              = NewWorkloadMetricHolder(Cpu, Requests)
+	MemoryLimits             = NewWorkloadMetricHolder(Memory, Limits)
+	MemoryRequests           = NewWorkloadMetricHolder(Memory, Requests)
+	MemLimits                = NewWorkloadMetricHolder(Mem, Limits)
+	MemRequests              = NewWorkloadMetricHolder(Mem, Requests)
+	PodsLimits               = NewWorkloadMetricHolder(Pods, Limits).OverrideFileName(Pods)
+	CpuReservationPercent    = NewWorkloadMetricHolder(Cpu, Reservation, Percent)
+	MemoryReservationPercent = NewWorkloadMetricHolder(Memory, Reservation, Percent)
+	PodCount                 = NewWorkloadMetricHolder(Pod, Count)
+	OomKillEvents            = NewWorkloadMetricHolder(Oom, Kill, Events)
+	CpuThrottlingEvents      = NewWorkloadMetricHolder(Cpu, Throttling, Events)
 )
 
 var conditionalQueries = map[bool][]string{
@@ -83,10 +110,10 @@ var conditionalQueries = map[bool][]string{
 }
 
 var conditionalMetricHolders = []*WorkloadMetricHolder{
-	NewWorkloadMetricHolder(Cpu, Requests),
-	NewWorkloadMetricHolder(Cpu, Reservation, Percent),
-	NewWorkloadMetricHolder(Memory, Requests),
-	NewWorkloadMetricHolder(Memory, Reservation, Percent),
+	CpuRequests,
+	CpuReservationPercent,
+	MemoryRequests,
+	MemoryReservationPercent,
 }
 
 func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, querySubToMetricFields map[string][]model.LabelName, entityKind string) {
@@ -245,4 +272,82 @@ func WriteValues(file io.Writer, clusterName, fields string, values []model.Samp
 		}
 	}
 	return nil
+}
+
+type ClusterWorkloadWriters map[string]*os.File
+type WorkloadWriters map[string]ClusterWorkloadWriters
+
+func NewWorkloadWriters() WorkloadWriters {
+	return make(WorkloadWriters)
+}
+
+func (wws WorkloadWriters) AddMetricWorkloadWriters(wmhs ...*WorkloadMetricHolder) {
+	for _, wmh := range wmhs {
+		metric := wmh.GetName(MetricName, true)
+		wws[metric] = make(ClusterWorkloadWriters)
+	}
+}
+
+func (wws WorkloadWriters) CloseAndClearWorkloadWriters(entityKind string) {
+	for _, cws := range wws {
+		for cluster, file := range cws {
+			if err := file.Close(); err != nil {
+				LogError(err, DefaultLogFormat, cluster, entityKind)
+			}
+		}
+		clear(cws)
+	}
+	clear(wws)
+}
+
+type WorkloadProducer interface {
+	GetCluster() string
+	GetEntityKind() string
+	GetRowPrefixes() []string
+	ShouldWrite(metric string) bool
+}
+
+func WriteWorkload(wp WorkloadProducer, wws WorkloadWriters, wmh *WorkloadMetricHolder, ss *model.SampleStream, f ConvFunc[float64]) {
+	metric := wmh.GetName(MetricName, true)
+	if !wp.ShouldWrite(metric) {
+		return
+	}
+	cluster := wp.GetCluster()
+	ek := wp.GetEntityKind()
+	var file *os.File
+	var err error
+	if file = wws[metric][cluster]; file == nil {
+		if file, err = os.Create(GetFileName(cluster, ek, wmh.GetName(FileName, true))); err == nil {
+			hf, _ := GetCsvHeaderFormat(ek)
+			if _, err = fmt.Fprintf(file, hf, metric); err == nil {
+				wws[metric][cluster] = file
+			} else {
+				LogError(err, DefaultLogFormat, cluster, ek)
+				_ = file.Close()
+			}
+		} else {
+			LogError(err, DefaultLogFormat, cluster, ek)
+		}
+	}
+	if err == nil && file != nil {
+		vals := make([]float64, len(ss.Values))
+		times := make([]string, len(ss.Values))
+		for i, value := range ss.Values {
+			val := float64(value.Value)
+			if f != nil {
+				val = f(val)
+			}
+			vals[i] = val
+			times[i] = FormatTime(value.Timestamp)
+		}
+	outer:
+		for _, rowPrefix := range wp.GetRowPrefixes() {
+			for i, t := range times {
+				if _, err = fmt.Fprintf(file, "%s,%s,%f\n", rowPrefix, t, vals[i]); err != nil {
+					LogError(err, DefaultLogFormat, cluster, ek)
+					break outer
+				}
+			}
+		}
+	}
 }

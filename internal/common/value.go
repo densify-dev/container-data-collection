@@ -8,6 +8,8 @@ const (
 	milli        = 1000
 )
 
+type ConvFunc[N Number] func(N) N
+
 func MiB[N Number](n N) N {
 	return n / N(mib)
 }

@@ -12,12 +12,12 @@ const (
 	ClusterQueryFormat = ClusterFormat + Space + QueryFormat
 )
 
-func CollectAndProcessMetric(query string, promRange v1.Range, matrixFunc ClusterMatrixFunc) (n int, err error) {
+func CollectAndProcessMetric(query string, promRange *v1.Range, matrixFunc ClusterMatrixFunc) (n int, err error) {
 	n, err = CollectAndProcessMetricErrorLogLevel(2, query, promRange, matrixFunc, Warn)
 	return
 }
 
-func CollectAndProcessMetricErrorLogLevel(callDepth int, query string, promRange v1.Range, matrixFunc ClusterMatrixFunc, level LogLevel) (n int, err error) {
+func CollectAndProcessMetricErrorLogLevel(callDepth int, query string, promRange *v1.Range, matrixFunc ClusterMatrixFunc, level LogLevel) (n int, err error) {
 	callDepth++
 	var resultMap ClusterResultMap
 	resultMap, n, err = CollectMetric(callDepth, query, promRange)

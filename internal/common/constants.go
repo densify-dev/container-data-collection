@@ -84,6 +84,7 @@ const (
 	Max         = "max"
 	Avg         = "avg"
 	Min         = "min"
+	Sum         = "sum"
 	MCoresSt    = "mcores"
 	Extra       = "extra"
 	Bearer      = "Bearer"
@@ -92,6 +93,14 @@ const (
 	Map         = "map"
 	Catalog     = "catalog"
 	Source      = "source"
+	Oom         = "oom"
+	Kill        = "kill"
+	Event       = "event"
+	Throttling  = "throttling"
+	Second      = "second"
+	Rollout     = "rollout"
+	Analysis    = "analysis"
+	Run         = "run"
 )
 
 // owner kind labels
@@ -106,7 +115,9 @@ var (
 	ReplicationControllerOwner = CamelCase(Replication, Controller)
 	CronJobOwner               = CamelCase(Cron, Job)
 	ConfigMapOwner             = CamelCase(ConfigSt, Map)   // openshift
-	CatalogSourceOwner         = CamelCase(Catalog, Source) // openshift
+	CatalogSourceOwner         = CamelCase(Catalog, Source) // openshift / Operator Framework
+	RolloutOwner               = CamelCase(Rollout)         // Argo
+	AnalysisRunOwner           = CamelCase(Analysis, Run)   // Argo
 )
 
 // these are practically constants but as they use functions they need to be vars
@@ -141,6 +152,8 @@ var (
 	Labels                = Plural(Label)
 	CurrentSizeName       = DromedaryCase(CurrentSize.GetMetricName())
 	NodeGroupInclude      = JoinNoSep(Node, Group)
+	Events                = Plural(Event)
+	Seconds               = Plural(Second)
 )
 
 func Join(sep string, elements ...string) string {
@@ -179,6 +192,10 @@ func Plural(s string) string {
 	return s + "s"
 }
 
+func Singular(s string) string {
+	return strings.TrimSuffix(s, "s")
+}
+
 const (
 	exactEqual         = "="
 	regexMatch         = "=~"
@@ -212,8 +229,9 @@ const (
 
 const (
 	LabelNamesPlaceholder = `LNPH`
+	NonNameString         = `#//#`
 	// labelsPlaceholder contains - on purpose - characters which are invalid for model.LabelName
-	labelsPlaceholder     = `#//#CLUSTER_LABELS#//#`
+	labelsPlaceholder     = NonNameString + `CLUSTER_LABELS` + NonNameString
 	emptyByClause         = Space + "by" + Space + emptySelector
 	queryLogPrefix        = "QueryRange:"
 	queryLogSuffix        = "query = %s"

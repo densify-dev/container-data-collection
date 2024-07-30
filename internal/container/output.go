@@ -4,7 +4,6 @@ package container
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/prometheus/common/model"
 	"os"
 	"strings"
 )
@@ -214,26 +213,19 @@ func writeHpaAttrs(name string, cluster map[string]map[string]*hpa) {
 	}
 }
 
-var objWorkloadWriters = make(map[string]map[string]*os.File)
+var containerWorkloadWriters = common.NewWorkloadWriters()
 
-func writeObjWorkload(metric, cluster, nsName string, obj *k8sObject, values []model.SamplePair) (err error) {
-	if file := objWorkloadWriters[metric][cluster]; file != nil {
-	outer:
-		for cName := range obj.containers {
-			for _, value := range values {
-				if _, err = fmt.Fprintf(file, "%s,%s,%s,%s,%s,%s,%f\n", cluster, nsName, obj.name, getOwnerKindValue(obj.kind), common.ReplaceColons(cName), common.FormatTime(value.Timestamp), value.Value); err != nil {
-					common.LogError(err, common.DefaultLogFormat, cluster, common.ContainerEntityKind)
-					break outer
-				}
-			}
-		}
-	}
-	return
-}
+var written = make(map[string]map[*container]bool)
 
 var ownerLabelValues = []string{common.PodOwner, common.DeploymentOwner, common.JobOwner, common.NodeOwner,
 	common.ReplicaSetOwner, common.DaemonSetOwner, common.StatefulSetOwner,
-	common.ReplicationControllerOwner, common.CronJobOwner, common.ConfigMapOwner, common.CatalogSourceOwner}
+	common.ReplicationControllerOwner, common.CronJobOwner, common.ConfigMapOwner,
+	// Well-known CRDs
+	// - Operator Framework / OpenShift
+	common.CatalogSourceOwner,
+	// - Argo
+	common.RolloutOwner, common.AnalysisRunOwner,
+}
 
 var ownerLabelValuesMap = makeOwnerLabelValuesMap()
 

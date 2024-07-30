@@ -12,6 +12,8 @@ import (
 // A node structure. Used for storing attributes and config details.
 type node struct {
 	labelMap                                                                                              map[string]string
+	name                                                                                                  string
+	providerId                                                                                            string
 	netSpeedBytes, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
 	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
 	cpuLimit, cpuRequest, memLimit, memRequest                                                            int
@@ -84,6 +86,7 @@ func Metrics() {
 		query = `kube_node_status_allocatable_pods{}`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
+	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests)
 
 	mh.name = common.Limits
 	query = `sum(kube_pod_container_resource_limits{}) by (node, resource)`
@@ -93,6 +96,7 @@ func Metrics() {
 		query = `sum(kube_pod_container_resource_limits_cpu_cores{}) by (node)*1000`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 		mh.name = common.MemLimit
+		query = `sum(kube_pod_container_resource_limits_memory_bytes{}) by (node)/1024/1024`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 
@@ -108,8 +112,37 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 
+	nodeWorkloadWriters.CloseAndClearWorkloadWriters(common.NodeEntityKind)
+
 	writeConfig()
 	writeAttributes()
+
+	// get the reservation percent metrics
+	var rpCoreMetrics = []string{"kube_pod_container_resource_requests", "kube_node_status_capacity"}
+	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent}
+	var rpFormats = map[bool]string{
+		true:  `%s{resource="%s"}`,
+		false: `%s_%s{}`,
+	}
+	var rpArgs = map[bool][]string{
+		true:  {"cpu", "memory"},
+		false: {"cpu_cores", "memory_bytes"},
+	}
+
+	qw := simpleQueryWrapper(common.Node)
+	for _, f := range common.FoundIndicatorCounter(indicators, common.Requests) {
+		q := make([]string, len(rpCoreMetrics))
+		for i, wmh := range wmhs {
+			for j, rpcm := range rpCoreMetrics {
+				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm, rpArgs[f][i]))
+			}
+			query = fmt.Sprintf(`(%s / %s) * 100`, q[0], q[1])
+			wmh.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		}
+	}
+
+	query = qw.CountQuery.Wrap(`kube_pod_info`)
+	common.PodCount.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
 	if !HasNodeExporter(range5Min) {
@@ -118,7 +151,7 @@ func Metrics() {
 		return
 	}
 
-	for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
+	for _, qw = range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
 
 		query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
 		query = qw.Query.Wrap(query)
@@ -129,6 +162,12 @@ func Metrics() {
 
 		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
 		common.MemoryActualWorkload.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+
+		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill[` + common.Params.Collection.SampleRateSt + `m]))`)
+		common.OomKillEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+
+		query = qw.SumQuery.Wrap(`round(increase(node_cpu_core_throttles_total[` + common.Params.Collection.SampleRateSt + `m]))`)
+		common.CpuThrottlingEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
 		common.DiskReadBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
@@ -165,10 +204,12 @@ func Metrics() {
 
 		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
 		common.NetTotalPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+
 	}
 }
 
 const (
+	labelProviderId       = "provider_id"
 	labelOS               = "label_kubernetes_io_os"
 	labelOSBeta           = "label_beta_kubernetes_io_os"
 	labelInstanceType     = "label_node_kubernetes_io_instance_type"
@@ -220,9 +261,20 @@ func createNode(cluster string, result model.Matrix) {
 	}
 	for _, ss := range result {
 		nodeName := string(ss.Metric[common.Node])
+		// The provider Id is optional, populated for cloud providers k8s clusters (EKS, AKS, GKE)
+		// and OpenShift clusters on VMWare / cloud infrastructure. It's usually not populated for
+		// bare-metal / kind / OpenShift CRC trial clusters.
+		// common.AddToLabelMap() truncates the labels at 255 characters, and we have observed
+		// Azure's AKS provider Ids longer than 225 characters (the length depends on resource groups and VMSS names etc.).
+		// So not taking the risk here and getting the provider Id directly from the metric (rather than
+		// later from the labelMap).
+		provId := string(ss.Metric[labelProviderId])
 		var n *node
 		if n, f = nodes[cluster][nodeName]; !f {
 			n = &node{
+				name:                        nodeName,
+				providerId:                  provId,
+				labelMap:                    make(map[string]string),
 				netSpeedBytes:               common.UnknownValue,
 				cpuCapacity:                 common.UnknownValue,
 				memCapacity:                 common.UnknownValue,
@@ -238,7 +290,6 @@ func createNode(cluster string, result model.Matrix) {
 				cpuRequest:                  common.UnknownValue,
 				memLimit:                    common.UnknownValue,
 				memRequest:                  common.UnknownValue,
-				labelMap:                    make(map[string]string),
 			}
 			nodes[cluster][nodeName] = n
 		}
@@ -258,7 +309,7 @@ const (
 
 var once sync.Once
 
-func DetermineNodeExporter(range5Min v1.Range) {
+func DetermineNodeExporter(range5Min *v1.Range) {
 	once.Do(func() {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
 	})
@@ -290,7 +341,7 @@ func determineNodeExporter(cluster string, result model.Matrix) {
 }
 
 // HasNodeExporter returns true if node exporter metrics are present for any cluster
-func HasNodeExporter(range5Min v1.Range) bool {
+func HasNodeExporter(range5Min *v1.Range) bool {
 	DetermineNodeExporter(range5Min)
 	return len(nodeExporterIndicators) > 0
 }
@@ -298,8 +349,8 @@ func HasNodeExporter(range5Min v1.Range) bool {
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
 
 type QueryWrapper struct {
-	Query, SumQuery *common.WorkloadQueryWrapper
-	MetricField     []model.LabelName
+	Query, SumQuery, CountQuery *common.WorkloadQueryWrapper
+	MetricField                 []model.LabelName
 }
 
 const (
@@ -324,11 +375,16 @@ var queryWrappersMap = map[string]*QueryWrapper{
 }
 
 func simpleQueryWrapper(labelName string) *QueryWrapper {
+	sfx := fmt.Sprintf(") by (%s)", labelName)
 	return &QueryWrapper{
 		Query: &common.WorkloadQueryWrapper{},
 		SumQuery: &common.WorkloadQueryWrapper{
 			Prefix: "sum(",
-			Suffix: fmt.Sprintf(") by (%s)", labelName),
+			Suffix: sfx,
+		},
+		CountQuery: &common.WorkloadQueryWrapper{
+			Prefix: "count(",
+			Suffix: sfx,
 		},
 		MetricField: []model.LabelName{model.LabelName(labelName)},
 	}
