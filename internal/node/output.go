@@ -71,7 +71,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,ProviderId,NodeLabels"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,ProviderId,K8sVersion,NodeLabels"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 		return
 	}
@@ -92,6 +92,10 @@ func writeAttrs(name string, cluster map[string]*node) {
 			}
 		}
 		if err = common.PrintCSVStringValue(attributeWrite, n.providerId, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.k8sVersion, false); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}

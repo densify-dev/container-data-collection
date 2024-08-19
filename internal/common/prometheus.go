@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/common/sigv4"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,25 +24,28 @@ func CollectMetric(callDepth int, query string, promRange *v1.Range) (crm Cluste
 	if qry, err = cle.embedClusterLabels(query); err != nil {
 		return
 	}
+	pac := getApiCall(promRange)
 	for _, qlf := range labelFilters {
 		queries := qlf.adjustQuery(qry)
-		for cluster, q := range queries {
-			if cluster == Empty {
-				LogAll(callDepth+1, Debug, queryLogFormat, q)
-			} else {
-				LogCluster(callDepth+1, Debug, clusterQueryLogFormat, cluster, true, cluster, q)
+		for cluster, qr := range queries {
+			if excludeQueryForCluster(cluster, qr) {
+				logQuery(callDepth+1, cluster, qr+" - excluded for the cluster", pac)
+				continue
 			}
+			q, si := adjustIntervalToScrapeInterval(cluster, qr)
+			logQuery(callDepth+1, cluster, q, pac)
 			var pa v1.API
 			if pa, err = promApi(cluster); err == nil {
 				ctx, cancel := context.WithCancel(context.Background())
 				_ = time.AfterFunc(2*time.Minute, func() { cancel() })
 				var value model.Value
 				var e error
-				switch getApiCall(promRange) {
+				switch pac {
 				case ApiQuery:
 					value, _, e = pa.Query(ctx, q, promRange.End)
 				case ApiQueryRange:
-					value, _, e = pa.QueryRange(ctx, q, *promRange)
+					pr := adjustTimeRange(promRange, si)
+					value, _, e = pa.QueryRange(ctx, q, *pr)
 				case ApiQueryExemplars:
 					// no use for exemplars yet, just for completeness
 					_, e = pa.QueryExemplars(ctx, q, promRange.Start, promRange.End)
@@ -62,6 +66,14 @@ func CollectMetric(callDepth int, query string, promRange *v1.Range) (crm Cluste
 		}
 	}
 	return
+}
+
+func logQuery(callDepth int, cluster string, query string, pac PrometheusApiCall) {
+	if cluster == Empty {
+		LogAll(callDepth+1, Debug, queryLogFormat, pac, query)
+	} else {
+		LogCluster(callDepth+1, Debug, clusterQueryLogFormat, cluster, true, pac, cluster, query)
+	}
 }
 
 func CheckPrometheusUp() (n int) {
@@ -242,37 +254,31 @@ func TimeRange() (promRange *v1.Range) {
 }
 
 func TimeRangeForInterval(historyInterval time.Duration) (promRange *v1.Range) {
-	return timeRangeForInterval(historyInterval, ApiQueryRange)
+	return TimeRangeForIntervals(historyInterval, 0, ApiQueryRange)
 }
 
-func EndTimeOnly() (promRange *v1.Range) {
-	return timeRangeForInterval(0, ApiQuery)
+func TimeRangeEndTimeOnly() (promRange *v1.Range) {
+	return TimeRangeForIntervals(0, 0, ApiQuery)
 }
 
-func timeRangeForInterval(historyInterval time.Duration, target PrometheusApiCall) (promRange *v1.Range) {
-	var start, end time.Time
-	var step time.Duration
+func TimeRangeForIntervals(historyInterval, absoluteStep time.Duration, target PrometheusApiCall) (promRange *v1.Range) {
 	// for workload metrics the historyInterval will be set depending on how far back in history we are querying currently
 	// note it will be 0 for all queries that are not workload related.
-	intervalSize := time.Duration(Params.Collection.IntervalSize)
-	if target != ApiQuery {
-		switch Params.Collection.Interval {
-		case Days:
-			start = CurrentTime.Add(time.Hour * -24 * intervalSize).Add(time.Hour * -24 * intervalSize * historyInterval)
-		case Hours:
-			start = CurrentTime.Add(time.Hour * -1 * intervalSize).Add(time.Hour * -1 * intervalSize * historyInterval)
-		default:
-			start = CurrentTime.Add(time.Minute * -1 * intervalSize).Add(time.Minute * -1 * intervalSize * historyInterval)
-		}
-		step = time.Minute * time.Duration(Params.Collection.SampleRate)
-	}
-	switch Params.Collection.Interval {
-	case Days:
-		end = CurrentTime.Add(time.Hour * -24 * intervalSize * historyInterval)
-	case Hours:
-		end = CurrentTime.Add(time.Hour * -1 * intervalSize * historyInterval)
+	end := CurrentTime.Add(-Interval * historyInterval)
+	var start time.Time
+	var step time.Duration
+	switch target {
 	default:
-		end = CurrentTime.Add(time.Minute * -1 * intervalSize * historyInterval)
+		// do nothing
+	case ApiQueryRange:
+		if absoluteStep > 0 {
+			step = absoluteStep
+		} else {
+			step = Step
+		}
+		fallthrough
+	case ApiQueryExemplars:
+		start = end.Add(-Interval)
 	}
 	return &v1.Range{Start: start, End: end, Step: step}
 }
@@ -286,6 +292,19 @@ const (
 	ApiQueryExemplars
 )
 
+func (pac PrometheusApiCall) String() string {
+	switch pac {
+	case ApiQuery:
+		return "Query"
+	case ApiQueryRange:
+		return "QueryRange"
+	case ApiQueryExemplars:
+		return "QueryExemplars"
+	default:
+		return "unknown"
+	}
+}
+
 func getApiCall(promRange *v1.Range) (pac PrometheusApiCall) {
 	if promRange != nil {
 		if promRange.Start.IsZero() {
@@ -297,6 +316,17 @@ func getApiCall(promRange *v1.Range) (pac PrometheusApiCall) {
 				pac = ApiQueryRange
 			}
 		}
+	}
+	return
+}
+
+func adjustTimeRange(promRange *v1.Range, scrapeInterval time.Duration) (pr *v1.Range) {
+	if promRange != nil && promRange.Step < time.Second && promRange.Step > 0 && scrapeInterval > 0 {
+		// query resolution of less than a second doesn't make sense,
+		// it is therefore a factor to multiply the scrape interval by
+		pr = &v1.Range{Start: promRange.Start, End: promRange.End, Step: scrapeInterval * promRange.Step}
+	} else {
+		pr = promRange
 	}
 	return
 }
@@ -326,4 +356,232 @@ func ToPrometheusLabelNameList(list string) string {
 		names[i] = ToPrometheusLabelName(orgName)
 	}
 	return JoinComma(names...)
+}
+
+func CalculateScrapeIntervals() (err error) {
+	et := TimeRangeEndTimeOnly()
+	var query string
+	for _, exporter := range exporters {
+		var labelSelector string
+		if len(exporter.repLabels) > 0 {
+			labelSelector = Join(nonEmptyLabel+Comma, exporter.repLabels...) + nonEmptyLabel
+		}
+		query = fmt.Sprintf(`max(count_over_time(%s{%s}[%v])) by (job)`, exporter.repMetric, labelSelector, Interval)
+		_, err = CollectAndProcessMetric(query, et, exporter.scrapeIntervalFromRepQuery)
+	}
+	query = fmt.Sprintf(`max(sum_over_time(up{}[%v])) by (job)`, Interval)
+	if _, e := CollectAndProcessMetric(query, et, scrapeIntervalFromUp); err == nil && e != nil {
+		err = e
+	}
+	for cluster, m := range clusterExporters {
+		for _, ce := range m {
+			LogCluster(1, Debug, ClusterFormat+" Prometheus exporter: %+v", cluster, true, cluster, ce)
+		}
+	}
+	return
+}
+
+const (
+	cadvisor     = "cadvisor"
+	nodeExporter = "node-exporter"
+	ksm          = "kube-state-metrics"
+	ossm         = "openshift-state-metrics"
+)
+
+type exporter struct {
+	name          string
+	metricsPrefix string
+	repMetric     string
+	repLabels     []string
+}
+
+type clusterExporter struct {
+	exporter
+	promJob              string
+	ActualScrapeInterval time.Duration // exported for fmt pretty-printing
+	UpScrapeInterval     time.Duration // exported for fmt pretty-printing
+}
+
+func (e *exporter) scrapeIntervalFromRepQuery(cluster string, result model.Matrix) {
+	l := len(exporters)
+	if len(clusterExporters[cluster]) == 0 {
+		clusterExporters[cluster] = make(map[string]*clusterExporter, l)
+	}
+	if len(clusterExportersByJob[cluster]) == 0 {
+		clusterExportersByJob[cluster] = make(map[string][]*clusterExporter, l)
+	}
+	for _, ss := range result {
+		if jobName := GetValue(ss, Job); jobName != Empty {
+			ce := &clusterExporter{exporter: *e, promJob: jobName}
+			setScrapeInterval(&ce.ActualScrapeInterval, ss)
+			clusterExporters[cluster][e.metricsPrefix] = ce
+			clusterExportersByJob[cluster][jobName] = append(clusterExportersByJob[cluster][jobName], ce)
+		}
+	}
+}
+
+func scrapeIntervalFromUp(cluster string, result model.Matrix) {
+	for _, ss := range result {
+		if jobName := GetValue(ss, Job); jobName != Empty {
+			for _, ce := range clusterExportersByJob[cluster][jobName] {
+				if ce != nil {
+					setScrapeInterval(&ce.UpScrapeInterval, ss)
+				}
+			}
+		}
+	}
+}
+
+func setScrapeInterval(target *time.Duration, ss *model.SampleStream) {
+	if len(ss.Values) > 0 {
+		*target = (Interval / time.Duration(ss.Values[0].Value)).Round(time.Second)
+	}
+}
+
+var exporters = makeExporters()
+
+func makeExporters() []*exporter {
+	exps := make([]*exporter, 0, 4)
+	addExporter(&exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container})
+	addExporter(&exps, nodeExporter, "node_cpu_seconds_total", nil)
+	addExporter(&exps, ksm, "kube_pod_info", nil)
+	addExporter(&exps, ossm, "openshift_clusterresourcequota_usage", nil)
+	return exps
+}
+
+func addExporter(exps *[]*exporter, name, repMetric string, repLabels []string) {
+	*exps = append(*exps, &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels})
+}
+
+var clusterExporters = make(map[string]map[string]*clusterExporter)
+var clusterExportersByJob = make(map[string]map[string][]*clusterExporter)
+
+const (
+	rate     = "rate"
+	increase = "increase"
+	changes  = "changes"
+)
+
+var intervalFunctions = map[string]string{rate: "i", increase: Empty, changes: Empty}
+
+func adjustIntervalToScrapeInterval(cluster string, query string) (q string, si time.Duration) {
+	q = query
+	if cluster == Empty {
+		return
+	}
+	for f, prefixIgnore := range intervalFunctions {
+		flb := f + leftBracket
+		var prev string
+		var reps []string
+		for i, s := range strings.Split(q, flb) {
+			var rep string
+			if i > 0 && (prefixIgnore == Empty || !strings.HasSuffix(prev, prefixIgnore)) {
+				if j := strings.Index(s, leftSquareBracket); j > -1 {
+					if k := strings.Index(s[j:], rightSquareBracket); k > -1 {
+						metricName := s[:j]
+						scrapeInterval := getScrapeInterval(cluster, metricName)
+						orgD := s[j+1 : j+k]
+						var d time.Duration
+						var err error
+						if d, err = time.ParseDuration(orgD); err == nil {
+							d += scrapeInterval
+						} else {
+							if strings.HasPrefix(orgD, Asterisk) {
+								var n int64
+								if n, err = strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(orgD, Asterisk)), 10, 64); err == nil {
+									d = scrapeInterval * time.Duration(n)
+								}
+							}
+						}
+						if err == nil {
+							rep = fmt.Sprintf("%s[%v]%s", metricName, d, s[j+k+1:])
+							if si == 0 || scrapeInterval < si {
+								si = scrapeInterval
+							}
+						}
+					}
+				}
+			}
+			if rep == Empty {
+				rep = s
+			}
+			reps = append(reps, rep)
+			prev = s
+		}
+		q = strings.Join(reps, flb)
+	}
+	return
+}
+
+func getScrapeInterval(cluster string, metricName string) (si time.Duration) {
+	if e, f := clusterExporters[cluster][getExporterPrefix(metricName)]; f && e != nil {
+		if e.ActualScrapeInterval > 0 {
+			si = e.ActualScrapeInterval
+		} else {
+			si = e.UpScrapeInterval
+		}
+	}
+	return
+}
+
+func getExporterPrefix(metricName string) string {
+	return strings.Split(metricName, Underscore)[0]
+}
+
+type ClusterQueryExclusion func(cluster string, query string) bool
+
+func RegisterClusterQueryExclusion(ce ClusterQueryExclusion) {
+	clusterQueryExclusions = append(clusterQueryExclusions, ce)
+}
+
+var clusterQueryExclusions []ClusterQueryExclusion
+
+func excludeQueryForCluster(cluster string, query string) bool {
+	for _, ce := range clusterQueryExclusions {
+		if ce(cluster, query) {
+			return true
+		}
+	}
+	return false
+}
+
+type ResolveMetricFunc func(cluster string, metricName string)
+type ResolveMetricMap map[string]ResolveMetricFunc
+
+var presentMetrics = make(map[string]map[string]bool)
+
+func ResolveMetrics(m ResolveMetricMap) (err error) {
+	et := TimeRangeEndTimeOnly()
+	for metricName, f := range m {
+		mr := &metricResolver{metricName: metricName, f: f}
+		query := fmt.Sprintf(`max(present_over_time(%s{}[%v]))`, metricName, Interval)
+		if _, err = CollectAndProcessMetric(query, et, mr.resolve); err != nil {
+			break
+		}
+	}
+	return
+}
+
+func IsMetricPresent(cluster, metricName string) bool {
+	return presentMetrics[cluster][metricName]
+}
+
+type metricResolver struct {
+	metricName string
+	f          ResolveMetricFunc
+}
+
+func (mr *metricResolver) resolve(cluster string, result model.Matrix) {
+	var clusterPresentMetrics map[string]bool
+	var f bool
+	if clusterPresentMetrics, f = presentMetrics[cluster]; !f {
+		clusterPresentMetrics = make(map[string]bool)
+		presentMetrics[cluster] = clusterPresentMetrics
+	}
+	if result.Len() > 0 {
+		clusterPresentMetrics[mr.metricName] = true
+		if mr.f != nil {
+			mr.f(cluster, mr.metricName)
+		}
+	}
 }

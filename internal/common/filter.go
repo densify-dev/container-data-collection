@@ -246,7 +246,7 @@ func cleanQuery(query string) string {
 	s = strings.ReplaceAll(s, commaRightBracket, rightBracket)
 	// this may leave us with empty selectors in the form of "()" or empty label selectors in the form of "{}"
 	s = strings.ReplaceAll(s, emptyByClause, Empty)
-	s = strings.ReplaceAll(s, emptyLabelSelector, Empty)
+	s = strings.ReplaceAll(s, Braces, Empty)
 	return s
 
 }
@@ -257,15 +257,28 @@ func (qlf *queryLabelFilter) filterValue(cluster, query string, value model.Valu
 	switch v := value.(type) {
 	case model.Matrix:
 		mat = v
-		if mat.Len() == 0 {
-			e = fmt.Errorf("no data returned, model.Matrix is empty")
-		}
+	case model.Vector:
+		mat = vectorToMatrix(v)
 	default:
 		e = fmt.Errorf("cannot filter model.Value of type %T by cluster", v)
+	}
+	if e == nil && mat.Len() == 0 {
+		e = fmt.Errorf("no data returned, model.Matrix is empty")
 	}
 	// if passed original error, use it
 	if err != nil {
 		e = err
 	}
 	return split(&Result{Query: query, Matrix: mat, Error: e}, cluster, qlf.clusterFilters)
+}
+
+func vectorToMatrix(v model.Vector) model.Matrix {
+	m := make(model.Matrix, len(v))
+	for i, s := range v {
+		m[i] = &model.SampleStream{Metric: s.Metric, Values: []model.SamplePair{{Timestamp: s.Timestamp, Value: s.Value}}}
+		if s.Histogram != nil {
+			m[i].Histograms = []model.SampleHistogramPair{{Timestamp: s.Timestamp, Histogram: s.Histogram}}
+		}
+	}
+	return m
 }

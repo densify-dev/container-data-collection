@@ -6,6 +6,7 @@ import (
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/container"
 	"github.com/densify-dev/container-data-collection/internal/crq"
+	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/densify-dev/container-data-collection/internal/nodegroup"
 	"github.com/densify-dev/container-data-collection/internal/rq"
@@ -37,8 +38,14 @@ func main() {
 		logVerPrefix = "Detected "
 	}
 	common.LogAll(1, common.Info, "%sPrometheus version %s", logVerPrefix, ver)
+	if err = common.CalculateScrapeIntervals(); err != nil {
+		common.FatalError(err, "Failed to calculate scrape intervals:")
+	}
+	// first get the kubernetes version information, to be used by cluster and nodes
+	kubernetes.Metrics()
 	if includes(common.ContainerEntityKind) {
 		container.Metrics()
+		container.Events()
 	} else {
 		common.LogAll(1, common.Info, "Skipping container data collection")
 	}

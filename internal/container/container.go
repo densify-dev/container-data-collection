@@ -5,6 +5,7 @@ import (
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/prometheus/common/model"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -172,13 +173,6 @@ var (
 )
 
 var detectedOwnedTypes = make(map[string]bool)
-
-/*
-type ownedTypeHolder struct {
-	ownedType *typeHolder
-	ownerType string
-}
-*/
 
 var ownerLabelNames = []string{ownerKind, ownerName}
 
@@ -549,19 +543,7 @@ func Metrics() {
 
 	// container workloads
 	common.DebugLogObjectMemStats(common.JoinSpace(common.Container, common.Workload))
-	foqpb := &queryProcessorBuilder{lnt: fullOwnerLabelNames, th: &typeHolder{}}
-	groupClauses := map[string]*queryProcessorBuilder{
-		fmt.Sprintf(` * on (pod, namespace) group_left max(%s) by (namespace, pod, %s)) by (pod,namespace,%s)`, getOwnerQuery("kube_pod_owner", false), labelPlaceholders[containerIdx], labelPlaceholders[containerIdx]):    {lnt: podLabelNames, th: pth},
-		fmt.Sprintf(` * on (pod, namespace) group_left (owner_name,owner_kind) max(kube_pod_owner{}) by (namespace, pod, owner_name, owner_kind)) by (owner_kind,owner_name,namespace,%s)`, labelPlaceholders[containerIdx]): foqpb,
-	}
-	if detectedOwnedTypes[common.ReplicaSet] == true {
-		grClauseReplicaSet := fmt.Sprintf(` * on (pod, namespace) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace, pod, replicaset) * on (replicaset, namespace) group_left (owner_kind, owner_name) max(kube_replicaset_owner{}) by (namespace, replicaset, owner_kind, owner_name)) by (owner_kind, owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
-		groupClauses[grClauseReplicaSet] = foqpb
-	}
-	if detectedOwnedTypes[common.Job] == true {
-		grClauseJob := fmt.Sprintf(` * on (pod, namespace) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace, pod, job) * on (job, namespace) group_left (owner_kind, owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace, job, owner_kind, owner_name)) by (owner_kind, owner_name,namespace,%s)`, labelPlaceholders[containerIdx])
-		groupClauses[grClauseJob] = foqpb
-	}
+	groupClauses := buildGroupClauses(common.Metric)
 	wq := &workloadQuery{
 		metricName:   common.CamelCase(common.Cpu, common.MCoresSt),
 		baseQuery:    fmt.Sprintf(`round(max(irate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,%s,namespace,%s)*1000,1)`, common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx]),
@@ -642,4 +624,67 @@ func Metrics() {
 			}
 		}
 	}
+}
+
+const (
+	unownedGroupClause       = ` * on (namespace,pod) group_left max(%s) by (namespace,pod,%s)`
+	directlyOwnedGroupClause = ` * on (namespace,pod) group_left (owner_kind,owner_name) max(kube_pod_owner{}) by (namespace,owner_kind,owner_name,pod)`
+	replicaSetGroupClause    = ` * on (namespace,pod) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace,replicaset,pod) * on (namespace,replicaset) group_left (owner_kind,owner_name) max(kube_replicaset_owner{}) by (namespace,owner_kind,owner_name,replicaset)`
+	jobGroupClause           = ` * on (namespace,pod) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace,job,pod) * on (namespace,job) group_left (owner_kind,owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace,owner_kind,owner_name,job)`
+)
+
+func buildGroupClauses(subject string) map[string]*queryProcessorBuilder {
+	useSuffix := subject == common.Metric
+	groupClauses := make(map[string]*queryProcessorBuilder, 4)
+	buildGroupClause(groupClauses, false, unownedGroupClause, useSuffix)
+	buildGroupClause(groupClauses, true, directlyOwnedGroupClause, useSuffix)
+	if detectedOwnedTypes[common.ReplicaSet] {
+		buildGroupClause(groupClauses, true, replicaSetGroupClause, useSuffix)
+	}
+	if detectedOwnedTypes[common.Job] {
+		buildGroupClause(groupClauses, true, jobGroupClause, useSuffix)
+	}
+	return groupClauses
+}
+
+type groupClauseBuilder struct {
+	suffix string
+	args   []any
+}
+
+func buildGroupClause(qpbs map[string]*queryProcessorBuilder, owned bool, clauseFormat string, useSuffix bool) {
+	ensureGroupClauseBuilders()
+	gcb := groupClauseBuilders[owned]
+	clf := clauseFormat
+	var args []any
+	if useSuffix {
+		clf += gcb.suffix
+		args = append(gcb.args, labelPlaceholders[containerIdx])
+	} else {
+		args = gcb.args
+	}
+	cl := fmt.Sprintf(clf, args...)
+	var lnt labelNamesType
+	var th *typeHolder
+	if owned {
+		lnt = fullOwnerLabelNames
+		th = &typeHolder{}
+	} else {
+		lnt = podLabelNames
+		th = pth
+	}
+	qpbs[cl] = &queryProcessorBuilder{lnt: lnt, th: th}
+}
+
+var groupClauseBuilders map[bool]*groupClauseBuilder
+
+var gcbOnce sync.Once
+
+func ensureGroupClauseBuilders() {
+	gcbOnce.Do(func() {
+		groupClauseBuilders = map[bool]*groupClauseBuilder{
+			true:  {suffix: `) by (namespace,owner_kind,owner_name,%s)`},
+			false: {suffix: `) by (namespace,pod,%s)`, args: []any{getOwnerQuery("kube_pod_owner", false), labelPlaceholders[containerIdx]}},
+		}
+	})
 }

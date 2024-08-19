@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	nnet "github.com/densify-dev/net-utils/network"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -14,6 +15,7 @@ type node struct {
 	labelMap                                                                                              map[string]string
 	name                                                                                                  string
 	providerId                                                                                            string
+	k8sVersion                                                                                            string
 	netSpeedBytes, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
 	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
 	cpuLimit, cpuRequest, memLimit, memRequest                                                            int
@@ -118,7 +120,7 @@ func Metrics() {
 	writeAttributes()
 
 	// get the reservation percent metrics
-	var rpCoreMetrics = []string{"kube_pod_container_resource_requests", "kube_node_status_capacity"}
+	var rpCoreMetrics = []string{"kube_pod_container_resource_requests", "kube_node_status_allocatable"}
 	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent}
 	var rpFormats = map[bool]string{
 		true:  `%s{resource="%s"}`,
@@ -210,6 +212,7 @@ func Metrics() {
 
 const (
 	labelProviderId       = "provider_id"
+	labelKubeletVersion   = "kubelet_version"
 	labelOS               = "label_kubernetes_io_os"
 	labelOSBeta           = "label_beta_kubernetes_io_os"
 	labelInstanceType     = "label_node_kubernetes_io_instance_type"
@@ -269,11 +272,17 @@ func createNode(cluster string, result model.Matrix) {
 		// So not taking the risk here and getting the provider Id directly from the metric (rather than
 		// later from the labelMap).
 		provId := string(ss.Metric[labelProviderId])
+		var k8sVer string
+		// if we did not get the node k8s version, get it from the kubelet version
+		if k8sVer = kubernetes.GetNodeVersion(cluster, nodeName); k8sVer == common.Empty {
+			k8sVer = string(ss.Metric[labelKubeletVersion])
+		}
 		var n *node
 		if n, f = nodes[cluster][nodeName]; !f {
 			n = &node{
 				name:                        nodeName,
 				providerId:                  provId,
+				k8sVersion:                  k8sVer,
 				labelMap:                    make(map[string]string),
 				netSpeedBytes:               common.UnknownValue,
 				cpuCapacity:                 common.UnknownValue,

@@ -2,6 +2,7 @@
 
 - Densify account, which is provided with a [Densify subscription or through a free trial](https://www.densify.com/service/signup)
 - [Kubernetes](https://kubernetes.io/) or [OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift) cluster or clusters
+- [Egress Requirements](./egress-requirements.md) for your kubernetes / OpenShift cluster
 - [Prometheus or observability platform data source](#data-source)
 - [Kube-state-metrics](https://github.com/kubernetes/kube-state-metrics), see specific requirements [here](#kube-state-metrics-requirements)
 - [cAdvisor](https://github.com/google/cadvisor), typically running within the kubelet

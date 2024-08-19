@@ -8,23 +8,30 @@ import (
 )
 
 // globals
+//
 //go:generate sh -c "printf %s $(git describe --abbrev=0 --tags) > version.txt"
 //go:embed version.txt
 var Version string
 var Params *cconf.Parameters
 var CurrentTime time.Time
+var Interval time.Duration
+var Step time.Duration
 
 func SetCurrentTime() {
 	t := time.Now().UTC()
+	Interval = time.Duration(Params.Collection.IntervalSize)
 	switch Params.Collection.Interval {
 	case Days:
 		CurrentTime = time.Date(t.Year(), t.Month(), t.Day()-Params.Collection.OffsetInt, 0, 0, 0, 0, t.Location())
+		Interval *= time.Hour * 24
 	case Hours:
 		CurrentTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour()-Params.Collection.OffsetInt, 0, 0, 0, t.Location())
+		Interval *= time.Hour
 	default:
 		CurrentTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()-Params.Collection.OffsetInt, 0, 0, t.Location())
+		Interval *= time.Minute
 	}
-
+	Step = time.Minute * time.Duration(Params.Collection.SampleRate)
 }
 
 // AddToLabelMap is used to add values to label map used for attributes

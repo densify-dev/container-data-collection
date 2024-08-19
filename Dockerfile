@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=alpine
 
-FROM golang:bookworm as builder
+FROM golang:bookworm AS builder
 ADD . /github.com/densify-dev/container-data-collection
 WORKDIR /github.com/densify-dev/container-data-collection/cmd
 RUN go generate github.com/densify-dev/container-data-collection/internal/common

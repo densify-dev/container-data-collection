@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
 	"os"
@@ -113,7 +114,7 @@ func writeAttrs(name string, cl *cluster) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "Name,VirtualTechnology,VirtualDomain,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "Name,VirtualTechnology,VirtualDomain,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,K8sVersion"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ClusterEntityKind)
 		return
 	}
@@ -122,12 +123,15 @@ func writeAttrs(name string, cl *cluster) {
 		return
 	}
 	values := []int{cl.cpuLimit, cl.cpuRequest, cl.memLimit, cl.memRequest}
-	last := len(values) - 1
-	for i, value := range values {
-		if err = common.PrintCSVIntValue(attributeWrite, value, i == last); err != nil {
+	for _, value := range values {
+		if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.ClusterEntityKind)
 			return
 		}
+	}
+	if err = common.PrintCSVStringValue(attributeWrite, kubernetes.GetClusterVersion(name), true); err != nil {
+		common.LogError(err, common.DefaultLogFormat, name, common.ClusterEntityKind)
+		return
 	}
 }
 
@@ -179,7 +183,7 @@ func Metrics() {
 	writeConfig()
 	writeAttributes()
 
-	common.GetConditionalMetricsWorkload(indicators, common.Requests, map[string][]model.LabelName{common.Empty: nil}, common.ClusterEntityKind)
+	common.GetConditionalMetricsWorkload(indicators, common.Requests, map[string][]model.LabelName{common.Empty: nil}, common.ClusterEntityKind, common.Metric)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
 	if !node.HasNodeExporter(range5Min) {

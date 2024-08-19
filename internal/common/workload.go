@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"io"
 	"math"
@@ -55,11 +56,11 @@ func (wmh *WorkloadMetricHolder) GetName(nt NameType, singular bool) (name strin
 }
 
 func (wmh *WorkloadMetricHolder) GetWorkload(query string, metricField []model.LabelName, entityKind string) {
-	GetWorkload(2, wmh.fileName, wmh.metricName, query, metricField, entityKind)
+	GetWorkload(2, wmh.fileName, wmh.metricName, query, metricField, entityKind, Metric, nil)
 }
 
 func (wmh *WorkloadMetricHolder) GetWorkloadQueryVariants(callDepth int, qps map[string]*QueryProcessor, entityKind string) {
-	GetWorkloadQueryVariantsFieldConversion(callDepth+1, wmh.fileName, wmh.metricName, qps, entityKind)
+	GetWorkloadQueryVariantsFieldConversion(callDepth+1, wmh.fileName, wmh.metricName, qps, entityKind, Metric, nil)
 }
 
 // common WorkloadMetricHolder structs
@@ -97,15 +98,15 @@ var (
 var conditionalQueries = map[bool][]string{
 	true: {
 		`avg(sum(kube_pod_container_resource_requests{resource="cpu"}) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests{resource="cpu"}) by (node) / sum(kube_node_status_capacity{resource="cpu"}) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests{resource="cpu"}) by (node) / sum(kube_node_status_allocatable{resource="cpu"}) by (node)%s) * 100`,
 		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024) by (node) / sum(kube_node_status_capacity{resource="memory"}/1024/1024) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024) by (node) / sum(kube_node_status_allocatable{resource="memory"}/1024/1024) by (node)%s) * 100`,
 	},
 	false: {
 		`avg(sum(kube_pod_container_resource_requests_cpu_cores{}) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests_cpu_cores{}) by (node) / sum(kube_node_status_capacity_cpu_cores{}) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests_cpu_cores{}) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`,
 		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024) by (node) / sum(kube_node_status_capacity_memory_bytes{}/1024/1024) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024) by (node) / sum(kube_node_status_allocatable_memory_bytes{}/1024/1024) by (node)%s) * 100`,
 	},
 }
 
@@ -116,7 +117,7 @@ var conditionalMetricHolders = []*WorkloadMetricHolder{
 	MemoryReservationPercent,
 }
 
-func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, querySubToMetricFields map[string][]model.LabelName, entityKind string) {
+func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, querySubToMetricFields map[string][]model.LabelName, entityKind string, subject string) {
 	for _, f := range FoundIndicatorCounter(indicators, indicator) {
 		for i, q := range conditionalQueries[f] {
 			// substitute querySub in query and recreate queryToMetricFields map
@@ -126,7 +127,7 @@ func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, 
 				qps[query] = &QueryProcessor{MetricFields: metricFields}
 			}
 			cmh := conditionalMetricHolders[i]
-			GetWorkloadQueryVariants(2, cmh.fileName, cmh.metricName, qps, entityKind)
+			GetWorkloadQueryVariants(2, cmh.fileName, cmh.metricName, qps, entityKind, subject, nil)
 		}
 	}
 }
@@ -137,17 +138,18 @@ type QueryProcessor struct {
 }
 
 // GetWorkload used to query for the workload data and then calls write workload
-func GetWorkload(callDepth int, fileName, metricName, query string, metricFields []model.LabelName, entityKind string) {
+func GetWorkload(callDepth int, fileName, metricName, query string, metricFields []model.LabelName, entityKind string, subject string, tvp QueryProvider) {
 	qps := map[string]*QueryProcessor{query: {MetricFields: metricFields}}
-	GetWorkloadQueryVariants(callDepth+1, fileName, metricName, qps, entityKind)
+	GetWorkloadQueryVariants(callDepth+1, fileName, metricName, qps, entityKind, subject, tvp)
 }
 
-func GetWorkloadQueryVariants(callDepth int, fileName, metricName string, queryProcessors map[string]*QueryProcessor, entityKind string) {
-	GetWorkloadQueryVariantsFieldConversion(callDepth+1, fileName, metricName, queryProcessors, entityKind)
+func GetWorkloadQueryVariants(callDepth int, fileName, metricName string, queryProcessors map[string]*QueryProcessor, entityKind string, subject string, tvp QueryProvider) {
+	GetWorkloadQueryVariantsFieldConversion(callDepth+1, fileName, metricName, queryProcessors, entityKind, subject, tvp)
 }
 
-func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName string, queryProcessors map[string]*QueryProcessor, entityKind string) {
-	csvHeaderFormat, f := GetCsvHeaderFormat(entityKind)
+func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName string, queryProcessors map[string]*QueryProcessor, entityKind string, subject string, qp QueryProvider) {
+	prov := queryProviderOrDefault(qp)
+	csvHeaderFormat, f := GetCsvHeaderFormat(entityKind, subject)
 	if !f {
 		LogError(fmt.Errorf("no CSV header format found"), EntityFormat)
 		return
@@ -157,9 +159,9 @@ func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName
 	//This is done as the farther you go back in time the slower prometheus querying becomes and we have seen cases where will not run from timeouts on Prometheus.
 	//As a result if we do hit an issue with timing out on Prometheus side we still can send the current data and data going back to that point vs losing it all.
 	for historyInterval := 0; historyInterval < Params.Collection.HistoryInt; historyInterval++ {
-		range5Min := TimeRangeForInterval(time.Duration(historyInterval))
+		rng := prov.CalculateRange(historyInterval)
 		for query, qp := range queryProcessors {
-			if crm, _, err := CollectMetric(callDepth+1, query, range5Min); err != nil {
+			if crm, _, err := CollectMetric(callDepth+1, query, rng); err != nil {
 				LogErrorWithLevel(1, Warn, err, QueryFormat, metricName, query)
 			} else {
 				for cluster, result := range crm {
@@ -172,7 +174,7 @@ func GetWorkloadQueryVariantsFieldConversion(callDepth int, fileName, metricName
 						clusterFiles[cluster] = file
 					}
 					if file != nil {
-						fp := &FieldProvider{Cluster: cluster, MetricFields: qp.MetricFields, ConvF: qp.FF}
+						fp := &FieldProvider{Cluster: cluster, MetricFields: qp.MetricFields, ConvF: qp.FF, QProv: prov}
 						if err = writeWorkload(file, cluster, result.Matrix, fp); err != nil {
 							LogError(err, ClusterFileFormat, cluster, fileName)
 						}
@@ -215,7 +217,7 @@ func InitWorkloadFile(cluster, fileName, entityKind, csvHeaderFormat, metricName
 func writeWorkload(file io.Writer, clusterName string, result model.Matrix, fp *FieldProvider) error {
 	for _, ss := range result {
 		if f, ok := fp.Fields(ss.Metric); ok {
-			if err := WriteValues(file, clusterName, f, ss.Values); err != nil {
+			if err := WriteValues(file, clusterName, f, ss.Values, fp.QProv); err != nil {
 				return err
 			}
 		}
@@ -229,6 +231,7 @@ type FieldProvider struct {
 	Cluster      string
 	MetricFields []model.LabelName
 	ConvF        FieldsFunc
+	QProv        QueryProvider
 }
 
 func (fp *FieldProvider) Fields(metric model.Metric) (string, bool) {
@@ -252,26 +255,71 @@ func (fp *FieldProvider) Fields(metric model.Metric) (string, bool) {
 	return f, ok
 }
 
-func WriteValues(file io.Writer, clusterName, fields string, values []model.SamplePair) error {
+func WriteValues(file io.Writer, clusterName, fields string, values []model.SamplePair, qp QueryProvider) error {
 	for _, value := range values {
-		var val model.SampleValue
-		if fval := float64(value.Value); !math.IsNaN(fval) && !math.IsInf(fval, 0) {
-			val = value.Value
+		if !IsValidValue(&value) {
+			continue
 		}
-		var err error
-		if _, err = fmt.Fprintf(file, "%s,", clusterName); err != nil {
-			return err
-		}
-		if fields != Empty {
-			if _, err = fmt.Fprintf(file, "%s,", ReplaceSemiColons(fields)); err != nil {
-				return err
+		prov := queryProviderOrDefault(qp)
+		if tv := prov.TimeAndValues(&value); tv != nil {
+			for i := 0; i < tv.Count; i++ {
+				var err error
+				if _, err = fmt.Fprintf(file, "%s,", clusterName); err != nil {
+					return err
+				}
+				if fields != Empty {
+					if _, err = fmt.Fprintf(file, "%s,", ReplaceSemiColons(fields)); err != nil {
+						return err
+					}
+				}
+				if _, err = fmt.Fprintf(file, "%s,%s\n", FormatTime(tv.Time), tv.Values); err != nil {
+					return err
+				}
 			}
-		}
-		if _, err = fmt.Fprintf(file, "%s,%f\n", FormatTime(value.Timestamp), val); err != nil {
-			return err
 		}
 	}
 	return nil
+}
+
+type TimeAndValues struct {
+	Time   model.Time
+	Values string
+	Count  int
+}
+
+type QueryProvider interface {
+	TimeAndValues(value *model.SamplePair) *TimeAndValues
+	CalculateRange(historyInterval int) *v1.Range
+}
+
+func IsValidValue(value *model.SamplePair) bool {
+	f := float64(value.Value)
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
+
+type MetricTimeAndValuesProvider struct {
+}
+
+func (mtvp *MetricTimeAndValuesProvider) TimeAndValues(value *model.SamplePair) *TimeAndValues {
+	return &TimeAndValues{
+		Time:   value.Timestamp,
+		Values: fmt.Sprintf("%f", value.Value),
+		Count:  1,
+	}
+}
+
+func (mtvp *MetricTimeAndValuesProvider) CalculateRange(historyInterval int) *v1.Range {
+	return TimeRangeForInterval(time.Duration(historyInterval))
+}
+
+var metricTimeAndValuesProvider = &MetricTimeAndValuesProvider{}
+
+func queryProviderOrDefault(qp QueryProvider) QueryProvider {
+	if qp == nil {
+		return metricTimeAndValuesProvider
+	} else {
+		return qp
+	}
 }
 
 type ClusterWorkloadWriters map[string]*os.File
@@ -318,7 +366,7 @@ func WriteWorkload(wp WorkloadProducer, wws WorkloadWriters, wmh *WorkloadMetric
 	var err error
 	if file = wws[metric][cluster]; file == nil {
 		if file, err = os.Create(GetFileName(cluster, ek, wmh.GetName(FileName, true))); err == nil {
-			hf, _ := GetCsvHeaderFormat(ek)
+			hf, _ := GetCsvHeaderFormat(ek, Metric)
 			if _, err = fmt.Fprintf(file, hf, metric); err == nil {
 				wws[metric][cluster] = file
 			} else {

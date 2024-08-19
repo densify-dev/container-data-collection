@@ -101,6 +101,8 @@ const (
 	Rollout     = "rollout"
 	Analysis    = "analysis"
 	Run         = "run"
+	App         = "app"
+	Nil         = "<nil>"
 )
 
 // owner kind labels
@@ -154,6 +156,7 @@ var (
 	NodeGroupInclude      = JoinNoSep(Node, Group)
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
+	Asterisk              = "*"
 )
 
 func Join(sep string, elements ...string) string {
@@ -218,13 +221,14 @@ const (
 	semicolonStr       = ";"
 	semicolon          = ';'
 	colon              = ":"
-	emptyLabelSelector = leftBrace + rightBrace
+	Braces             = leftBrace + rightBrace
 	leftBraceComma     = leftBrace + Comma
 	commaRightBrace    = Comma + rightBrace
-	emptySelector      = leftBracket + rightBracket
+	Brackets           = leftBracket + rightBracket
 	leftBracketComma   = leftBracket + Comma
 	commaRightBracket  = Comma + rightBracket
 	commaComma         = Comma + Comma
+	nonEmptyLabel      = `=~".+"`
 )
 
 const (
@@ -232,8 +236,8 @@ const (
 	NonNameString         = `#//#`
 	// labelsPlaceholder contains - on purpose - characters which are invalid for model.LabelName
 	labelsPlaceholder     = NonNameString + `CLUSTER_LABELS` + NonNameString
-	emptyByClause         = Space + "by" + Space + emptySelector
-	queryLogPrefix        = "QueryRange:"
+	emptyByClause         = Space + "by" + Space + Brackets
+	queryLogPrefix        = "%v:"
 	queryLogSuffix        = "query = %s"
 	queryLogFormat        = queryLogPrefix + Space + queryLogSuffix
 	clusterQueryLogFormat = queryLogPrefix + Space + ClusterFormat + Space + queryLogSuffix

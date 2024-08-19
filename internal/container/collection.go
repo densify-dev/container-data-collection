@@ -596,7 +596,7 @@ var (
 )
 
 func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
-	csvHeaderFormat, f := common.GetCsvHeaderFormat(common.HpaEntityKind)
+	csvHeaderFormat, f := common.GetCsvHeaderFormat(common.HpaEntityKind, common.Metric)
 	if !f {
 		common.LogError(fmt.Errorf("no CSV header format found"), common.EntityFormat)
 		return
@@ -657,7 +657,7 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
 							fieldSet = append(fieldSet, []string{nsName, common.Empty, common.Empty, common.Empty, hpaName})
 						}
 						for _, fields := range fieldSet {
-							if err := common.WriteValues(clusterFiles[clName][isClassified], clName, common.JoinComma(fields...), h.workload[historyInterval]); err != nil {
+							if err := common.WriteValues(clusterFiles[clName][isClassified], clName, common.JoinComma(fields...), h.workload[historyInterval], nil); err != nil {
 								common.LogError(err, common.ClusterFileFormat, clName, wmhs[isClassified].GetFileName())
 							}
 						}

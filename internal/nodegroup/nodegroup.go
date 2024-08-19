@@ -386,7 +386,7 @@ func Metrics() {
 	writeConfig()
 
 	qmf := getQueryToMetricField(workloadNodeGroupSuffixNoBracket, ngl)
-	common.GetConditionalMetricsWorkload(foundUnified, common.Request, qmf, common.NodeGroupEntityKind)
+	common.GetConditionalMetricsWorkload(foundUnified, common.Request, qmf, common.NodeGroupEntityKind, common.Metric)
 
 	query = `sum(kube_node_labels{` + nodeGroupLabelPlaceholder + `=~".+"}) by (` + nodeGroupLabelPlaceholder + `)`
 	getWorkload(common.CurrentSize, query, ngl)

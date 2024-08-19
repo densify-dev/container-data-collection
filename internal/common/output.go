@@ -89,9 +89,9 @@ func ReplaceSemiColonsPipes(s string) string {
 	return strings.ReplaceAll(s, semicolonStr, Or)
 }
 
-func GetCsvHeaderFormat(entityKind string) (format string, f bool) {
+func GetCsvHeaderFormat(entityKind string, subject string) (format string, f bool) {
 	ek := strings.ToLower(entityKind)
-	format, f = csvHeaderFormats[ek]
+	format, f = csvHeaderFormats[subject][ek]
 	return
 }
 
@@ -193,7 +193,7 @@ type headerBuilder struct {
 	includeNamespace   bool
 }
 
-func (hb *headerBuilder) generateCsvHeaderFormat() string {
+func (hb *headerBuilder) generateCsvHeaderFormat(subject string) string {
 	l := 3
 	if hb.includeClusterName {
 		l++
@@ -209,7 +209,7 @@ func (hb *headerBuilder) generateCsvHeaderFormat() string {
 		components[1] = CamelCase(Namespace)
 	}
 	components[l-3] = hb.entityKindName
-	components[l-2] = CamelCase(Metric, Time)
+	components[l-2] = CamelCase(subject, Time)
 	components[l-1] = "%s\n"
 	return JoinComma(components...)
 }
@@ -226,10 +226,16 @@ var headerBuilders = map[string]*headerBuilder{
 
 var csvHeaderFormats = makeCsvHeaderFormats()
 
-func makeCsvHeaderFormats() map[string]string {
-	m := make(map[string]string, len(headerBuilders))
-	for entityKind, hb := range headerBuilders {
-		m[entityKind] = hb.generateCsvHeaderFormat()
+var headerFormatSubjects = []string{Metric, Event}
+
+func makeCsvHeaderFormats() map[string]map[string]string {
+	formats := make(map[string]map[string]string, len(headerFormatSubjects))
+	for _, subject := range headerFormatSubjects {
+		m := make(map[string]string, len(headerBuilders))
+		for entityKind, hb := range headerBuilders {
+			m[entityKind] = hb.generateCsvHeaderFormat(subject)
+		}
+		formats[subject] = m
 	}
-	return m
+	return formats
 }
