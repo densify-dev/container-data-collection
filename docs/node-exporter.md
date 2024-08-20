@@ -4,6 +4,7 @@
 
 | Prometheus Metric Name                   | Description/Usage               | C[^1] | N[^2]              | NG[^3]             | Cl[^4]             | RQ[^5] | CRQ[^6] |
 | ---------------------------------------- | ------------------------------- | ----- | ------------------ | ------------------ | ------------------ | ------ | ------- |
+| node_cpu_core_throttles_<br/>total       | CPU throttles per core          |       | :white_check_mark: |                    |                    |        |         |
 | node_cpu_seconds_total                   | CPU utilization in core seconds |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_disk_read_bytes_total               | Disk read bytes total           |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_disk_reads_completed_<br/>total     | Disk read operations            |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
@@ -18,6 +19,7 @@
 | node_network_speed_bytes                 | Network speed                   |       | :white_check_mark: |                    |                    |        |         |
 | node_network_transmit_bytes_<br/>total   | Raw net sent utilization        |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_network_transmit_packets_<br/>total | Network packets sent            |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
+| node_vmstat_oom_kill                     | Number of process OOM Kills     |       | :white_check_mark: |                    |                    |        |         |
 
 [^1]: Container Metrics
 [^2]: Node Metrics

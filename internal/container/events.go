@@ -113,6 +113,9 @@ func Events() {
 	for _, f := range common.FoundIndicatorCounter(indicators, ksmLastTerminatedTimestamp) {
 		eventQueries[makeRestartEventQuery(multipliers[f]).String()] = containerIdx
 	}
+	// cadvisor OOM kills are quickly deregistered when the kill causes container restart - see https://github.com/google/cadvisor/issues/3015 ;
+	// thus they only apply to "hidden OOM kills", which have been removed in k8s 1.28 with cgroup grouping (assuming cgroups v2) -
+	// https://github.com/kubernetes/kubernetes/pull/117793
 	oomkeqb := &eventQueryBuilder{baseMetric: cadvisorOomKillsMetric + common.Braces, fraction: fmt.Sprintf(`%.4f`, hiddenOomKillFraction)}
 	eventQueries[oomkeqb.String()] = podIdx
 	groupClauses := buildGroupClauses(common.Event)
