@@ -16,8 +16,8 @@ data :
             endpoint: /api/v2/
     # the entire retry section is optional, if omitted then the default values below are used
     #        retry:
-    #            wait_min: 1 # in seconds
-    #            wait_max: 30 # in seconds
+    #            wait_min: 1s
+    #            wait_max: 30s
     #            max_attempts: 4
     #            policy: default # valid values: default (same as exponential), exponential, jitter
     #    proxy:
@@ -47,8 +47,8 @@ data :
     #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
     # the entire retry section is optional, if omitted then the default values below are used
     #    retry:
-    #        wait_min: 1 # in seconds
-    #        wait_max: 30 # in seconds
+    #        wait_min: 1s
+    #        wait_max: 30s
     #        max_attempts: 4
     #        policy: default # valid values: default (same as exponential), exponential, jitter
     collection:
