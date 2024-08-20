@@ -23,6 +23,7 @@ const (
 	isPid1Factor                      = 10000
 	residualFactor                    = isPid1Factor / exitCodeFactor
 	fractionOffset                    = 0.5
+	maxEventCount                     = 100 // should probably be a single digit, take 100 to be on the safe side
 )
 
 func excludeHiddenOomKills(cluster string, query string) bool {
@@ -73,16 +74,18 @@ func (peep *ProcessExitEventProvider) TimeAndValues(value *model.SamplePair) *co
 	var t model.Time
 	// we need to distinguish between the cases when the integer part of the value is the event count,
 	// and when it's the timestamp multiplied by the event count
-	// it would suffice to subtract the scrape interval from the timestamp, but we don't have it here
-	// - hence use the common step (which should be larger than the scrape interval)
-	st := peep.PromRange.Start.Add(-common.Step).Unix()
 	i, f := math.Modf(float64(value.Value))
 	n := int64(math.Round(i))
-	count := n / st
-	if count == 0 {
+	var count int64
+	if n <= maxEventCount {
 		t = value.Timestamp
 		count = n
 	} else {
+		// the timestamp may lie before the start time, go back a while
+		st := peep.PromRange.Start.Add(-common.Interval).Unix()
+		if count = n / st; count == 0 {
+			count = 1
+		}
 		t = model.TimeFromUnix(n / count)
 	}
 	f = (f - fractionOffset) * exitCodeFactor
