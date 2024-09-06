@@ -7,7 +7,7 @@
 - [Kube-state-metrics](https://github.com/kubernetes/kube-state-metrics), see specific requirements [here](#kube-state-metrics-requirements)
 - [cAdvisor](https://github.com/google/cadvisor), typically running within the kubelet
 - [Node exporter](https://github.com/prometheus/node_exporter) is required for node analysis and recommendations
-- [OpenShift-state-metrics](https://github.com/openshift/openshift-state-metrics)
+- [OpenShift-state-metrics](https://github.com/openshift/openshift-state-metrics) is required for OpenShift clusters only
 - The list of required metrics of the various exporters is described [here](./docs/README.md)
 
 ## Data Source
@@ -38,6 +38,25 @@ Prometheus or the observability platform need to support the Prometheus API and 
 - HTTP basic authentication - supported by Prometheus and required by some commercial observability platforms, e.g. [Grafana Cloud](https://grafana.com/docs/grafana-cloud/cost-management-and-billing/analyze-costs/metrics-costs/prometheus-metrics-costs/usage-analysis-api/);
 - Bearer token - required by [OpenShift Monitoring](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.14/html/monitoring/accessing-third-party-monitoring-apis) and some commercial observability platforms, e.g. [Azure Monitor managed service for Prometheus](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql);
 - AWS SigV4 - required by [Amazon Managed Service for Prometheus](https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-secure-querying.html).
+
+## Data Integrity
+
+### In-cluster Prometheus
+
+In this use-case it is assumed that **all** data in Prometheus (of the relevant exporters) comes from the kubernetes / OpenShift cluster we are collecting data for.
+
+### Observability Platform
+
+In this use-case the observability platform typically collects data from multiple clusters and/or other sources. It is assumed that the data (of **all relevant exporters**) is identifiable by a **unique set of labels (names and values)** for each kubernetes / OpenShift cluster we are collecting data for. The set of labels is typically achieved using `global.external_labels` in the [configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#configuration-file) of the source Prometheus server / OTel collector feeding the data into the observability platform.
+
+### Exporters
+
+The following applies for both in-cluster Prometheus and observability platform, per cluster:
+
+- kube-state-metrics - one and only one instance of kube-state-metrics should be scraped;
+- openshift-state-metrics (OpenShift clusters only) - one and only one instance of openshift-state-metrics should be scraped;
+- cAdvisor is typically running within the kubelet; cAdvisors of **all** cluster nodes' kubelets, and **only** of the cluster nodes' kubelets, should be scraped;
+- Node exporter of **all** cluster nodes, and **only** of the cluster nodes, should be scraped; scraping node exporters from virtual machines and/or cloud instances which are not cluster nodes will cause data integrity issues
 
 ## Kube-state-metrics Requirements
 
