@@ -159,20 +159,18 @@ func excludeNodeLabel(key, _ string) bool {
 var (
 	pth            = &typeHolder{typeName: common.Pod}
 	dth            = &typeHolder{typeName: common.Deployment}
-	donth          = &typeHolder{typeName: common.Deployment, typeLabel: ownerName}
 	rsth           = &typeHolder{typeName: common.ReplicaSet}
 	rcth           = &typeHolder{typeName: common.ReplicationController}
 	dsth           = &typeHolder{typeName: common.DaemonSet}
 	ssth           = &typeHolder{typeName: common.StatefulSet}
 	jth            = &typeHolder{typeName: common.Job, typeLabel: common.SnakeCase(common.Job, common.Name)}
 	cjth           = &typeHolder{typeName: common.CronJob}
-	cjonth         = &typeHolder{typeName: common.CronJob, typeLabel: ownerName}
 	hpath          = &typeHolder{typeName: common.Hpa, typeLabel: hpaFullName}
 	oldhpath       = &typeHolder{typeName: common.Hpa}
 	hpaTypeHolders = []*typeHolder{hpath, oldhpath}
 )
 
-var detectedOwnedTypes = make(map[string]bool)
+var detectedOwnershipTypes = make(map[string]map[string]map[string]bool)
 
 var ownerLabelNames = []string{ownerKind, ownerName}
 
@@ -188,6 +186,11 @@ func (th *typeHolder) getOwners(cluster string, result model.Matrix) {
 		do = make(map[string]bool)
 		detectedOwners[cluster] = do
 	}
+	var ott map[string]map[string]bool
+	if ott, f = detectedOwnershipTypes[th.typeName]; !f {
+		ott = make(map[string]map[string]bool)
+		detectedOwnershipTypes[th.typeName] = ott
+	}
 	for _, ss := range result {
 		// don't pass cluster name as the cluster is not populated yet and we don't need the namespace
 		if nsName, _, values, ok := getNamespaceAndValues(ownerLabelNames, common.Empty, ss); ok {
@@ -197,13 +200,17 @@ func (th *typeHolder) getOwners(cluster string, result model.Matrix) {
 			co[ownedKey] = owShip
 			if isRelevant(cluster, nsName, ownedId) {
 				do[owShip.directOwner.Key(nsName)] = true
+				var cott map[string]bool
+				if cott, f = ott[cluster]; !f {
+					cott = make(map[string]bool)
+					ott[cluster] = cott
+				}
+				cott[owShip.directOwner.kind] = true
 			}
 		}
 	}
 	if len(co) == 0 {
 		common.LogCluster(1, common.Info, noOwnersFoundFormat, cluster, true, cluster, common.Plural(th.typeName))
-	} else {
-		detectedOwnedTypes[th.typeName] = true
 	}
 }
 
@@ -514,8 +521,11 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.CurrentSizeName)
 	mh.metric = common.CurrentSizeName
 	omh.typeHolder = rsth
+	oomh := &ownedObjectMetricHolder{objectMetricHolder: omh}
 	query = `kube_replicaset_spec_replicas{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	query = `max(max(kube_replicaset_spec_replicas{}) by (namespace,replicaset) * on (namespace,replicaset) group_right max(kube_replicaset_owner{}) by (namespace, replicaset, owner_name)) by (owner_name, namespace)`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
 	omh.typeHolder = rcth
 	query = `kube_replicationcontroller_spec_replicas{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
@@ -528,12 +538,8 @@ func Metrics() {
 	omh.typeHolder = jth
 	query = `kube_job_spec_parallelism{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	omh.typeHolder = cjonth
 	query = `max(max(kube_job_spec_parallelism{}) by (namespace,job_name) * on (namespace,job_name) group_right max(kube_job_owner{}) by (namespace, job_name, owner_name)) by (owner_name, namespace)`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	omh.typeHolder = donth
-	query = `max(max(kube_replicaset_spec_replicas{}) by (namespace,replicaset) * on (namespace,replicaset) group_right max(kube_replicaset_owner{}) by (namespace, replicaset, owner_name)) by (owner_name, namespace)`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
 
 	containerWorkloadWriters.CloseAndClearWorkloadWriters(common.ContainerEntityKind)
 	clear(written)
@@ -638,10 +644,10 @@ func buildGroupClauses(subject string) map[string]*queryProcessorBuilder {
 	groupClauses := make(map[string]*queryProcessorBuilder, 4)
 	buildGroupClause(groupClauses, false, unownedGroupClause, useSuffix)
 	buildGroupClause(groupClauses, true, directlyOwnedGroupClause, useSuffix)
-	if detectedOwnedTypes[common.ReplicaSet] {
+	if len(detectedOwnershipTypes[common.ReplicaSet]) > 0 {
 		buildGroupClause(groupClauses, true, replicaSetGroupClause, useSuffix)
 	}
-	if detectedOwnedTypes[common.Job] {
+	if len(detectedOwnershipTypes[common.Job]) > 0 {
 		buildGroupClause(groupClauses, true, jobGroupClause, useSuffix)
 	}
 	return groupClauses

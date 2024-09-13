@@ -306,6 +306,23 @@ func (omh *objectMetricHolder) getObjectMetric(cluster string, result model.Matr
 	}
 }
 
+type ownedObjectMetricHolder struct {
+	*objectMetricHolder
+}
+
+func (oomh *ownedObjectMetricHolder) getObjectMetric(cluster string, result model.Matrix) {
+	for _, omh := range oomh.getOwnerObjectMetricHolders(cluster) {
+		omh.getObjectMetric(cluster, result)
+	}
+}
+
+func (oomh *ownedObjectMetricHolder) getOwnerObjectMetricHolders(cluster string) (omhs []*objectMetricHolder) {
+	for ownerType := range detectedOwnershipTypes[oomh.typeName][cluster] {
+		omhs = append(omhs, &objectMetricHolder{oomh.metricHolder, &typeHolder{typeName: ownerType, typeLabel: ownerName}})
+	}
+	return
+}
+
 type hpaMetricHolder struct {
 	*objectMetricHolder
 }
