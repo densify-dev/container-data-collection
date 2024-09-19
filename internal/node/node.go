@@ -143,7 +143,7 @@ func Metrics() {
 		}
 	}
 
-	query = qw.CountQuery.Wrap(`kube_pod_info`)
+	query = qw.CountQuery.Wrap(`kube_pod_info{}`)
 	common.PodCount.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
@@ -165,10 +165,10 @@ func Metrics() {
 		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
 		common.MemoryActualWorkload.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill[` + common.Params.Collection.SampleRateSt + `m]))`)
+		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill{}[` + common.Params.Collection.SampleRateSt + `m]))`)
 		common.OomKillEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
-		query = qw.SumQuery.Wrap(`round(increase(node_cpu_core_throttles_total[` + common.Params.Collection.SampleRateSt + `m]))`)
+		query = qw.SumQuery.Wrap(`round(increase(node_cpu_core_throttles_total{}[` + common.Params.Collection.SampleRateSt + `m]))`)
 		common.CpuThrottlingEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
