@@ -97,16 +97,16 @@ var (
 
 var conditionalQueries = map[bool][]string{
 	true: {
-		`avg(sum(kube_pod_container_resource_requests{resource="cpu"}) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests{resource="cpu"}) by (node) / sum(kube_node_status_allocatable{resource="cpu"}) by (node)%s) * 100`,
-		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024) by (node) / sum(kube_node_status_allocatable{resource="memory"}/1024/1024) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests{resource="cpu"} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)%s)`,
+		`avg(sum(kube_pod_container_resource_requests{resource="cpu"} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node) / sum(kube_node_status_allocatable{resource="cpu"}) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024 and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)%s)`,
+		`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024 and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node) / sum(kube_node_status_allocatable{resource="memory"}/1024/1024) by (node)%s) * 100`,
 	},
 	false: {
-		`avg(sum(kube_pod_container_resource_requests_cpu_cores{}) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests_cpu_cores{}) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`,
-		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024) by (node)%s)`,
-		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024) by (node) / sum(kube_node_status_allocatable_memory_bytes{}/1024/1024) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests_cpu_cores{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)%s)`,
+		`avg(sum(kube_pod_container_resource_requests_cpu_cores{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`,
+		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024 and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)%s)`,
+		`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024 and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node) / sum(kube_node_status_allocatable_memory_bytes{}/1024/1024) by (node)%s) * 100`,
 	},
 }
 

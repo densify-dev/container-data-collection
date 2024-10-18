@@ -168,7 +168,6 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			continue
 		}
 		value := common.LastValue(ss)
-		intValue := int(value)
 		resource, _ := common.GetLabelValue(ss, common.Resource)
 		switch mh.metric {
 		case common.Limits:
@@ -206,9 +205,9 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.memRequest = common.IntMiB(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 		case restarts:
-			c.restarts = intValue
+			c.restarts = int(value)
 		case powerSt:
-			c.powerState = powerState(intValue)
+			c.powerState = powerState(value)
 		}
 	}
 }

@@ -60,13 +60,18 @@ func (o *ownership) getTopLevelOwner() (oid *objectId) {
 
 type powerState int
 
-// String - powerState is obtained using queries for Terminated status, therefore
+// powerState is obtained using queries for Terminated status, therefore
 // 0 means Running and 1 means Terminated
+const (
+	running powerState = iota
+	terminated
+)
+
 func (ps powerState) String() (s string) {
 	switch ps {
-	case 0:
+	case running:
 		s = common.Running
-	case 1:
+	case terminated:
 		s = common.Terminated
 	}
 	return
@@ -87,6 +92,17 @@ type container struct {
 	powerState                                                   powerState
 	name                                                         string
 	labelMap                                                     map[string]string
+}
+
+var nonContinuousKinds = map[string]bool{
+	common.Pod:         true,
+	common.Job:         true,
+	common.CronJob:     true,
+	common.AnalysisRun: true,
+}
+
+func (obj *k8sObject) isRunningRelevant() bool {
+	return obj != nil && nonContinuousKinds[obj.kind]
 }
 
 type clusterOwnerships map[string]*ownership
@@ -352,24 +368,31 @@ func Metrics() {
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
+	stsq := fmt.Sprintf("min_over_time(kube_pod_container_status_terminated{}[%dm])", common.Params.Collection.SampleRate)
+	mh.metric = powerSt
+	query = fmt.Sprintf("min(%s) by (pod,namespace,container)", stsq)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
+	fstsq := fmt.Sprintf(" and (%s == 0)", stsq)
 	mh.metric = common.Limits
-	query = `sum(kube_pod_container_resource_limits{}) by (pod,namespace,container,resource)`
+	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuLimit
-		query = `sum(kube_pod_container_resource_limits_cpu_cores{}) by (pod,namespace,container)`
+		query = fmt.Sprintf("sum(kube_pod_container_resource_limits_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 		mh.metric = common.MemLimit
-		query = `sum(kube_pod_container_resource_limits_memory_bytes{}) by (pod,namespace,container)`
+		query = fmt.Sprintf("sum(kube_pod_container_resource_limits_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 	mh.metric = common.Requests
-	query = `sum(kube_pod_container_resource_requests{}) by (pod,namespace,container,resource)`
+	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuRequest
-		query = `sum(kube_pod_container_resource_requests_cpu_cores{}) by (pod,namespace,container)`
+		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 		mh.metric = common.MemRequest
-		query = `sum(kube_pod_container_resource_requests_memory_bytes{}) by (pod,namespace,container)`
+		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 	query = `kube_pod_container_info{}`
@@ -385,13 +408,6 @@ func Metrics() {
 	mh.metric = restarts
 	query = `sum(kube_pod_container_status_restarts_total{}) by (pod,namespace,container)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
-
-	mh.metric = powerSt
-	query = `sum(kube_pod_container_status_terminated{}) by (pod,namespace,container)`
-	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
-		query = `sum(kube_pod_container_status_terminated_reason{}) by (pod,namespace,container)`
-		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
-	}
 
 	mh.metric = createTime
 	omh := &objectMetricHolder{metricHolder: mh, typeHolder: pth}
@@ -536,9 +552,10 @@ func Metrics() {
 	query = `kube_statefulset_replicas{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 	omh.typeHolder = jth
-	query = `kube_job_spec_parallelism{}`
+	jczsq := fmt.Sprintf("max_over_time(kube_job_spec_parallelism{}[%dm]) and (max_over_time(kube_job_status_active{}[%dm]) == 1)", common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
+	query = jczsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	query = `max(max(kube_job_spec_parallelism{}) by (namespace,job_name) * on (namespace,job_name) group_right max(kube_job_owner{}) by (namespace, job_name, owner_name)) by (owner_name, namespace)`
+	query = fmt.Sprintf("max(max(%s) by (namespace,job_name) * on (namespace,job_name) group_right max(kube_job_owner{}) by (namespace, job_name, owner_name)) by (owner_name, namespace)", jczsq)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
 
 	containerWorkloadWriters.CloseAndClearWorkloadWriters(common.ContainerEntityKind)
@@ -596,7 +613,7 @@ func Metrics() {
 	wq.wqwIdx = containerIdx
 	wq.hasSuffix = false
 	wq.aggregators = map[string]string{common.Max: common.Empty}
-	wq.baseQuery = fmt.Sprintf(`max(round(increase(kube_pod_container_status_restarts_total{name!~"k8s_POD_.*"}[%dm]),1)) by (instance,pod,namespace,%s)`, common.Params.Collection.SampleRate, labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s)`, common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
 	spmxr := &hpaWorkloadQuery{

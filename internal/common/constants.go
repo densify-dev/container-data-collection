@@ -148,6 +148,7 @@ var (
 	StatefulSet           = strings.ToLower(StatefulSetOwner)
 	ReplicationController = strings.ToLower(ReplicationControllerOwner)
 	CronJob               = strings.ToLower(CronJobOwner)
+	AnalysisRun           = strings.ToLower(AnalysisRunOwner)
 	Replicas              = Plural(Replica)
 	Days                  = Plural(Day)
 	Hours                 = Plural(Hour)
