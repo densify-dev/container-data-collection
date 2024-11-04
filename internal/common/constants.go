@@ -83,6 +83,7 @@ const (
 	Label       = "label"
 	Max         = "max"
 	Avg         = "avg"
+	Average     = "average"
 	Min         = "min"
 	Sum         = "sum"
 	MCoresSt    = "mcores"
@@ -103,6 +104,9 @@ const (
 	Run         = "run"
 	App         = "app"
 	Nil         = "<nil>"
+	Key         = "key"
+	Value       = "value"
+	Effect      = "effect"
 )
 
 // owner kind labels

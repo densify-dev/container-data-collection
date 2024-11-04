@@ -136,6 +136,21 @@ func getNodeMetricString(cluster string, result model.Matrix) {
 	}
 }
 
+func getNodeTaints(cluster string, result model.Matrix) {
+	for _, ss := range result {
+		n, ok := getNode(cluster, ss, common.Node)
+		if !ok {
+			continue
+		}
+		t := &taint{
+			key:    string(ss.Metric[common.Key]),
+			value:  string(ss.Metric[common.Value]),
+			effect: string(ss.Metric[common.Effect]),
+		}
+		n.taints = append(n.taints, t)
+	}
+}
+
 type nodeWorkloadProducer struct {
 	cluster string
 	node    *node

@@ -7,8 +7,36 @@ import (
 	nnet "github.com/densify-dev/net-utils/network"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
+	"strings"
 	"sync"
 )
+
+type taint struct {
+	key, value, effect string
+}
+
+func (t *taint) String() (s string) {
+	if t != nil {
+		var val string
+		if t.value != common.Empty {
+			val = fmt.Sprintf(",=%s", t.value)
+		}
+		s = fmt.Sprintf("%s%s:%s", t.key, val, t.effect)
+	}
+	return
+}
+
+type taints []*taint
+
+func (ts taints) String() string {
+	ss := make([]string, 0, len(ts))
+	for _, t := range ts {
+		if s := t.String(); s != common.Empty {
+			ss = append(ss, s)
+		}
+	}
+	return strings.Join(ss, common.Or)
+}
 
 // A node structure. Used for storing attributes and config details.
 type node struct {
@@ -19,6 +47,7 @@ type node struct {
 	netSpeedBytes, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
 	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
 	cpuLimit, cpuRequest, memLimit, memRequest                                                            int
+	taints                                                                                                taints
 }
 
 // Map that labels and values will be stored in
@@ -48,6 +77,9 @@ func Metrics() {
 
 	query = `kube_node_role{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeMetricString)
+
+	query = `kube_node_spec_taint{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeTaints)
 
 	DetermineNodeExporter(range5Min)
 

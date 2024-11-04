@@ -108,7 +108,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -163,12 +163,14 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					return
 				}
 				values = []int{ns.cpuRequest, ns.cpuLimit, ns.memRequest, ns.memLimit, ns.podsLimit}
-				lastOne := len(values) - 1
-				for i, value := range values {
-					if err = common.PrintCSVIntValue(attributeWrite, value, i == lastOne); err != nil {
+				for _, value := range values {
+					if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 						return
 					}
+				}
+				if err = obj.hpa.writeAttributes(attributeWrite, name, common.ContainerEntityKind, true); err != nil {
+					return
 				}
 			}
 		}
@@ -195,22 +197,49 @@ func writeHpaAttrs(name string, cluster map[string]map[string]*hpa) {
 			common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,HpaName,Labels"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,HpaName,HpaLabels,HpaTargetMetricName"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
 		return
 	}
 	for nsName, ns := range cluster {
-		for hpaName, h := range ns {
-			if _, err = fmt.Fprintf(attributeWrite, "%s,%s,,,,%s,", name, nsName, hpaName); err != nil {
+		for _, h := range ns {
+			if _, err = fmt.Fprintf(attributeWrite, "%s,%s,,,,", name, nsName); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
 				return
 			}
-			if err = common.PrintCSVLabelMap(attributeWrite, h.labels, true); err != nil {
-				common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
+			if err = h.writeAttributes(attributeWrite, name, common.Hpa, true); err != nil {
 				return
 			}
 		}
 	}
+}
+
+func (h *hpa) writeAttributes(attributeWrite *os.File, cluster, entityKind string, last bool) error {
+	var err error
+	if h == nil {
+		if err = common.PrintCSVStringValue(attributeWrite, ",,", last); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+	} else {
+		if err = common.PrintCSVStringValue(attributeWrite, h.name, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, common.Empty, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		if err = common.PrintCSVLabelMap(attributeWrite, h.labels, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, h.metricName, last); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+	}
+	return nil
 }
 
 var containerWorkloadWriters = common.NewWorkloadWriters()

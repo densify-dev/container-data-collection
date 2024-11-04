@@ -370,19 +370,19 @@ var (
 	scaleTargetRef = common.JoinNoSep(scale, target, ref)
 	strKind        = common.SnakeCase(scaleTargetRef, common.Kind)
 	strName        = common.SnakeCase(scaleTargetRef, common.Name)
-	hpaTargets     = []string{common.Deployment, common.StatefulSet, common.ReplicaSet, common.ReplicationController}
+	hpaTargets     = []string{common.Deployment, common.StatefulSet, common.ReplicaSet, common.ReplicationController, common.Rollout}
 )
 
 func makeHpaWorkload() [][]model.SamplePair {
 	return make([][]model.SamplePair, common.Params.Collection.HistoryInt)
 }
 
-func newObjectHpa(obj *k8sObject) *hpa {
-	return &hpa{obj: obj}
-}
-
-func newUnclassifiedHpa() *hpa {
-	return &hpa{labels: make(map[string]string)}
+func newHpa(obj *k8sObject, name, metricName string) *hpa {
+	h := &hpa{obj: obj, name: name, metricName: metricName, labels: make(map[string]string)}
+	if obj != nil {
+		obj.hpa = h
+	}
+	return h
 }
 
 func (h *hpa) isClassified() bool {
@@ -390,13 +390,7 @@ func (h *hpa) isClassified() bool {
 }
 
 func (h *hpa) addToLabelMap(ss *model.SampleStream) {
-	var labels map[string]string
-	if h.isClassified() {
-		labels = h.obj.labelMap
-	} else {
-		labels = h.labels
-	}
-	addToLabelMap(ss.Metric, labels, excludeNodeLabel)
+	addToLabelMap(ss.Metric, h.labels, excludeNodeLabel)
 }
 
 func (h *hpa) getGlobalMap() hpaMap {
@@ -426,7 +420,7 @@ func findHpa(cluster, nsName, hpaName string) (h *hpa, ok bool) {
 func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 	for _, ss := range result {
 		hpaLabel := th.getTypeLabelName()
-		nsName, ns, values, ok := getNamespaceAndValues([]string{strKind, strName, hpaLabel}, cluster, ss)
+		nsName, ns, values, ok := getNamespaceAndValues([]string{strKind, strName, hpaLabel, metricNameLabel}, cluster, ss)
 		if !ok {
 			continue
 		}
@@ -438,7 +432,7 @@ func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 			common.LogCluster(1, common.Error, common.ClusterFormat+" failed to find object of kind %s and name %s in namespace %s", cluster, true, cluster, kind, name, nsName)
 			continue
 		}
-		h := newObjectHpa(obj)
+		h := newHpa(obj, values[hpaLabel], values[metricNameLabel])
 		h.addHpa(cluster, nsName, values[hpaLabel])
 		h.addToLabelMap(ss)
 	}
@@ -459,13 +453,13 @@ func (th *typeHolder) getHpaMetricString(cluster string, result model.Matrix) {
 				oid.kind = trg
 				var obj *k8sObject
 				if obj, ok = ns.objects[oid.Key(nsName)]; ok {
-					h = newObjectHpa(obj)
+					h = newHpa(obj, hpaValue, common.Empty)
 					break
 				}
 			}
 			if !ok {
 				// no luck finding target
-				h = newUnclassifiedHpa()
+				h = newHpa(nil, hpaValue, common.Empty)
 			}
 			h.addHpa(cluster, nsName, hpaValue)
 		}
@@ -588,7 +582,7 @@ func getWorkload(wq *workloadQuery) {
 	}
 }
 
-func hpaStatusConditionClause(lh *labelHolder) string {
+func hpaStatusConditionLabelFilter(lh *labelHolder) string {
 	var st, cond interface{}
 	if lh.names[podIdx] == common.Pod {
 		st = true
@@ -598,6 +592,10 @@ func hpaStatusConditionClause(lh *labelHolder) string {
 		cond = true
 	}
 	return fmt.Sprintf(`{%s="%v", %s="%v"}`, status, st, condition, cond)
+}
+
+func hpaTargetMetricLabelFilter(metricName, metricTargetType string) string {
+	return fmt.Sprintf(`{%s="%s", %s="%s"}`, metricNameLabel, metricName, metricTargetTypeLabel, metricTargetType)
 }
 
 type hpaWorkloadQuery struct {
@@ -611,7 +609,9 @@ var (
 	hpaExtraPrefix = []string{common.Hpa, common.Extra}
 )
 
-func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
+var targetMetricSubject = [2]string{target, common.Metric}
+
+func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, labelFilter string) {
 	csvHeaderFormat, f := common.GetCsvHeaderFormat(common.HpaEntityKind, common.Metric)
 	if !f {
 		common.LogError(fmt.Errorf("no CSV header format found"), common.EntityFormat)
@@ -627,15 +627,21 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
 			}
 		}
 	}
-	mn := append(hpaPrefix, hwq.querySubject...)
+	mn := hpaPrefix
+	xfn := hpaExtraPrefix
+	if len(hwq.querySubject) != 2 || targetMetricSubject != ([2]string)(hwq.querySubject) {
+		mn = append(mn, hwq.querySubject...)
+		xfn = append(xfn, hwq.querySubject...)
+	}
 	mn = append(mn, hwq.metricNameSuffixes...)
-	xfn := append(append(hpaExtraPrefix, hwq.querySubject...), hwq.metricNameSuffixes...)
+	xfn = append(xfn, hwq.metricNameSuffixes...)
 	swmh := common.NewWorkloadMetricHolder(mn...)
 	xwmh := common.NewWorkloadMetricHolder(mn...).OverrideFileName(xfn...)
 	wmhs := map[bool]*common.WorkloadMetricHolder{true: swmh, false: xwmh}
 	l := len(wmhs)
 	q := append([]string{hwq.queryContext}, hwq.querySubject...)
-	query := hmh.query(q...) + clause
+	query := hmh.query(q...) + labelFilter
+	var foundValues bool
 	for historyInterval := 0; historyInterval < common.Params.Collection.HistoryInt; historyInterval++ {
 		range5Min := common.TimeRangeForInterval(time.Duration(historyInterval))
 		if crm, _, err := common.CollectMetric(2, query, range5Min); err != nil {
@@ -647,11 +653,17 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, clause string) {
 						var h *hpa
 						if h, ok = findHpa(cluster, nsName, hpaValue); ok {
 							h.workload[historyInterval] = append(h.workload[historyInterval], ss.Values...)
+							if len(ss.Values) > 0 {
+								foundValues = true
+							}
 						}
 					}
 				}
 			}
 		}
+	}
+	if !foundValues {
+		return
 	}
 	clusterFiles := make(map[string]map[bool]*os.File)
 	for historyInterval := 0; historyInterval < common.Params.Collection.HistoryInt; historyInterval++ {

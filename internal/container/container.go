@@ -84,6 +84,7 @@ type k8sObject struct {
 	currentSize, restarts int
 	createTime            time.Time
 	labelMap              map[string]string
+	hpa                   *hpa
 }
 
 // container is used to hold information related to containers
@@ -108,9 +109,11 @@ func (obj *k8sObject) isRunningRelevant() bool {
 type clusterOwnerships map[string]*ownership
 
 type hpa struct {
-	obj      *k8sObject
-	labels   map[string]string
-	workload [][]model.SamplePair
+	obj        *k8sObject
+	name       string
+	metricName string
+	labels     map[string]string
+	workload   [][]model.SamplePair
 }
 
 type hpaMap map[string]map[string]map[string]*hpa
@@ -520,11 +523,12 @@ func Metrics() {
 	var hmhs []*hpaMetricHolder
 	var totals int
 	for _, th := range hpaTypeHolders {
-		hmh := &hpaMetricHolder{objectMetricHolder: &objectMetricHolder{}}
-		hmh.typeHolder = th
-		query = hmh.query(common.InfoSt)
+		hmh := &hpaMetricHolder{objectMetricHolder: &objectMetricHolder{typeHolder: th}}
+		query = fmt.Sprintf("%s%s * on (namespace, %s) group_left(%s) %s%s",
+			hmh.query(common.InfoSt), common.Braces, th.getTypeLabelName(), metricNameLabel,
+			hmh.query(spec, target, common.Metric), common.Braces)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, hmh.getHpa)
-		query = hmh.query(common.Labels)
+		query = hmh.query(common.Labels) + common.Braces
 		if n, err = common.CollectAndProcessMetric(query, range5Min, hmh.getHpaMetricString); n > 0 {
 			hmhs = append(hmhs, hmh)
 		}
@@ -629,11 +633,16 @@ func Metrics() {
 		querySubject: []string{common.Current, common.Replicas},
 	}
 	hwqs := []*hpaWorkloadQuery{spmxr, spmnr, stcr}
+
+	targetMetricContexts := map[string]string{spec: target, status: common.Current}
+	targetMetricQuerySubject := targetMetricSubject[:]
+	targetMetricNames := []string{common.Cpu, common.Memory}
+	targetMetricTypes := map[string]string{common.Avg: common.Average, common.Utilization: common.Utilization}
 	for _, hmh := range hmhs {
-		var clause string
+		labelFilter := common.Braces
 		var hwq *hpaWorkloadQuery
 		for _, hwq = range hwqs {
-			hwq.getWorkload(hmh, clause)
+			hwq.getWorkload(hmh, labelFilter)
 		}
 		hwq = &hpaWorkloadQuery{
 			queryContext:       status,
@@ -642,8 +651,21 @@ func Metrics() {
 		}
 		for _, lh := range labelHolders {
 			if lh.detected {
-				clause = hpaStatusConditionClause(lh)
-				hwq.getWorkload(hmh, clause)
+				labelFilter = hpaStatusConditionLabelFilter(lh)
+				hwq.getWorkload(hmh, labelFilter)
+			}
+		}
+		for ctx, c := range targetMetricContexts {
+			for _, metricName := range targetMetricNames {
+				for t, labelType := range targetMetricTypes {
+					hwq = &hpaWorkloadQuery{
+						queryContext:       ctx,
+						querySubject:       targetMetricQuerySubject,
+						metricNameSuffixes: []string{metricName, c, t},
+					}
+					labelFilter = hpaTargetMetricLabelFilter(metricName, labelType)
+					hwq.getWorkload(hmh, labelFilter)
+				}
 			}
 		}
 	}

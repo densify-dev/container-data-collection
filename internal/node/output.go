@@ -71,7 +71,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,ProviderId,K8sVersion,NodeLabels"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,ProviderId,K8sVersion,NodeLabels,NodeTaints"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 		return
 	}
@@ -103,7 +103,11 @@ func writeAttrs(name string, cluster map[string]*node) {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
-		if err = common.PrintCSVLabelMap(attributeWrite, n.labelMap, true); err != nil {
+		if err = common.PrintCSVLabelMap(attributeWrite, n.labelMap, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.taints.String(), true); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
