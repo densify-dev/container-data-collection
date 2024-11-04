@@ -371,10 +371,10 @@ func Metrics() {
 
 	stsq := fmt.Sprintf("min_over_time(kube_pod_container_status_terminated{}[%dm])", common.Params.Collection.SampleRate)
 	mh.metric = powerSt
-	query = fmt.Sprintf("min(%s) by (pod,namespace,container)", stsq)
+	query = fmt.Sprintf("min(%s) by (namespace,pod,container)", stsq)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
-	fstsq := fmt.Sprintf(" and (%s == 0)", stsq)
+	fstsq := fmt.Sprintf(" and on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
 	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
