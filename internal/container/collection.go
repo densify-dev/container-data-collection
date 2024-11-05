@@ -299,6 +299,12 @@ func (omh *objectMetricHolder) getObjectMetric(cluster string, result model.Matr
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CurrentSize, ss, nil)
 		case createTime:
 			obj.createTime = time.Unix(int64Value, 0)
+		case qosClass:
+			// as we set a single value as an attribute, set the maximum value we find
+			qosClassValue := string(ss.Metric[model.LabelName(qosClassLabel)])
+			if cmpQosClasses(qosClassValue, obj.qosClass) > 0 {
+				obj.qosClass = qosClassValue
+			}
 		default:
 			common.AddToLabelMap(omh.metric, strconv.FormatInt(int64Value, 10), obj.labelMap)
 		}
