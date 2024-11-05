@@ -108,7 +108,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,QosClass"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -169,7 +169,11 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 						return
 					}
 				}
-				if err = obj.hpa.writeAttributes(attributeWrite, name, common.ContainerEntityKind, true); err != nil {
+				if err = obj.hpa.writeAttributes(attributeWrite, name, common.ContainerEntityKind, false); err != nil {
+					return
+				}
+				if err = common.PrintCSVStringValue(attributeWrite, obj.qosClass, true); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
 			}

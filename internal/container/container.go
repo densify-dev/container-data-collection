@@ -77,6 +77,49 @@ func (ps powerState) String() (s string) {
 	return
 }
 
+type QosClass int
+
+const (
+	_ QosClass = iota
+	bestEffort
+	burstable
+	guaranteed
+)
+
+const (
+	BestEffort = "BestEffort"
+	Burstable  = "Burstable"
+	Guaranteed = "Guaranteed"
+)
+
+func (qc QosClass) String() (s string) {
+	switch qc {
+	case bestEffort:
+		s = BestEffort
+	case burstable:
+		s = Burstable
+	case guaranteed:
+		s = Guaranteed
+	default:
+		s = common.Empty
+	}
+	return
+}
+
+var qosClassRanks = initQosClassRanks()
+
+func initQosClassRanks() map[string]int {
+	qcr := make(map[string]int, guaranteed)
+	for qc := bestEffort; qc <= guaranteed; qc++ {
+		qcr[qc.String()] = int(qc)
+	}
+	return qcr
+}
+
+func cmpQosClasses(qc1, qc2 string) int {
+	return qosClassRanks[qc1] - qosClassRanks[qc2]
+}
+
 // k8sObject is used to hold information related to the highest owner of any containers
 type k8sObject struct {
 	*objectId
@@ -85,6 +128,7 @@ type k8sObject struct {
 	createTime            time.Time
 	labelMap              map[string]string
 	hpa                   *hpa
+	qosClass              string
 }
 
 // container is used to hold information related to containers
@@ -415,6 +459,10 @@ func Metrics() {
 	mh.metric = createTime
 	omh := &objectMetricHolder{metricHolder: mh, typeHolder: pth}
 	query = `kube_pod_created{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+
+	mh.metric = qosClass
+	query = `kube_pod_status_qos_class{} == 1`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 
 	// namespace metrics

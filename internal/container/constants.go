@@ -35,6 +35,8 @@ const (
 	condition   = "condition"
 	scaling     = "scaling"
 	limited     = "limited"
+	qos         = "qos"
+	class       = "class"
 )
 
 var (
@@ -57,4 +59,6 @@ var (
 	scalingLimited        = common.CamelCase(scaling, limited)
 	metricNameLabel       = common.SnakeCase(common.Metric, common.Name)
 	metricTargetTypeLabel = common.SnakeCase(common.Metric, target, common.Type)
+	qosClass              = common.DromedaryCase(qos, class)
+	qosClassLabel         = common.SnakeCase(qosClass)
 )
