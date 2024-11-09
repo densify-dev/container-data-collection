@@ -138,7 +138,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 						return
 					}
 				}
-				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%v,%s,%s", cName, common.ReplaceSemiColonsPipes(obj.labelMap[common.Node]), c.powerState, getOwnerKindValue(obj.kind), obj.name); err != nil {
+				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%s,%s,%s", cName, common.ReplaceSemiColonsPipes(obj.labelMap[common.Node]), c.powerState.String(), getOwnerKindValue(obj.kind), obj.name); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
