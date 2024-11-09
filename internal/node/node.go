@@ -54,8 +54,8 @@ type node struct {
 var nodes = make(map[string]map[string]*node)
 
 type reservationPercentQuery struct {
-	metric    string
-	andClause string
+	metric string
+	clause string
 }
 
 // Metrics a global func for collecting node level metrics in prometheus
@@ -128,26 +128,26 @@ func Metrics() {
 	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests)
 
 	mh.name = common.Limits
-	query = `sum(kube_pod_container_resource_limits{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node, resource)`
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{}`, `) by (node, resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuLimit
-		query = `sum(kube_pod_container_resource_limits_cpu_cores{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)*1000`
+		query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits_cpu_cores{}`, `) by (node)*1000`)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 		mh.name = common.MemLimit
-		query = `sum(kube_pod_container_resource_limits_memory_bytes{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)/1024/1024`
+		query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits_memory_bytes{}`, `) by (node)/1024/1024`)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 
 	mh.name = common.Requests
-	query = `sum(kube_pod_container_resource_requests{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node,resource)`
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests{}`, `) by (node,resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuRequest
-		query = `sum(kube_pod_container_resource_requests_cpu_cores{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)*1000`
+		query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node)*1000`)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 		mh.name = common.MemRequest
-		query = `sum(kube_pod_container_resource_requests_memory_bytes{} and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)) by (node)/1024/1024`
+		query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests_memory_bytes{}`, `) by (node)/1024/1024`)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 
@@ -159,7 +159,7 @@ func Metrics() {
 	// get the reservation percent metrics
 	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent}
 	var rpCoreMetrics = []*reservationPercentQuery{
-		{"kube_pod_container_resource_requests", " and on (container, pod, namespace) (kube_pod_container_status_terminated{} == 0)"},
+		{"kube_pod_container_resource_requests", common.FilterTerminatedContainersClause},
 		{"kube_node_status_allocatable", common.Empty},
 	}
 	var rpFormats = map[bool]string{
@@ -176,14 +176,14 @@ func Metrics() {
 		q := make([]string, len(rpCoreMetrics))
 		for i, wmh := range wmhs {
 			for j, rpcm := range rpCoreMetrics {
-				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.andClause))
+				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.clause))
 			}
 			query = fmt.Sprintf(`(%s / %s) * 100`, q[0], q[1])
 			wmh.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 		}
 	}
 
-	query = qw.CountQuery.Wrap(`kube_pod_info{} and on (pod, namespace) (count(kube_pod_container_status_terminated{} == 0) by (pod, namespace) > 0)`)
+	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster

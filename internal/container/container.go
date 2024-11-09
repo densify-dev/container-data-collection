@@ -60,19 +60,17 @@ func (o *ownership) getTopLevelOwner() (oid *objectId) {
 
 type powerState int
 
-// powerState is obtained using queries for Terminated status, therefore
-// 0 means Running and 1 means Terminated
 const (
-	running powerState = iota
-	terminated
+	terminated powerState = iota
+	running
 )
 
 func (ps powerState) String() (s string) {
 	switch ps {
-	case running:
-		s = common.Running
 	case terminated:
 		s = common.Terminated
+	case running:
+		s = common.Running
 	}
 	return
 }
@@ -416,12 +414,13 @@ func Metrics() {
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
-	stsq := fmt.Sprintf("min_over_time(kube_pod_container_status_terminated{}[%dm])", common.Params.Collection.SampleRate)
+	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container))",
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	mh.metric = powerSt
-	query = fmt.Sprintf("min(%s) by (namespace,pod,container)", stsq)
+	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
-	fstsq := fmt.Sprintf(" and on (namespace,pod,container) (%s == 0)", stsq)
+	fstsq := fmt.Sprintf(" unless on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
 	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
