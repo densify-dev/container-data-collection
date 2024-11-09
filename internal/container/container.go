@@ -367,8 +367,8 @@ func Metrics() {
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
-	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm])) by (namespace,pod,container))",
-		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
+	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container))",
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	mh.metric = powerSt
 	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
