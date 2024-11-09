@@ -50,6 +50,7 @@
 | kube_pod_container_status_<br/>last_terminated_timestamp         | Container last exit timestamp        | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_pod_container_status_<br/>restarts_total                    | Container restarts                   | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_pod_container_status_<br/>terminated                        | Container power state                | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |         |
+| kube_pod_container_status_<br/>terminated_reason                 | Container power state                | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |         |
 | kube_pod_created                                                 | Pod creation time                    | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_pod_info                                                    | Pod information                      | :white_check_mark: | :white_check_mark: |                    |                    |                    |         |
 | kube_pod_labels                                                  | Pod labels                           | :white_check_mark: |                    |                    |                    |                    |         |
