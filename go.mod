@@ -2,6 +2,9 @@ module github.com/densify-dev/container-data-collection
 
 go 1.23
 
+// see https://pkg.go.dev/crypto/x509#ParseCertificate
+godebug x509negativeserial=1
+
 require (
 	github.com/densify-dev/container-config v1.0.15
 	github.com/densify-dev/net-utils v1.0.8
