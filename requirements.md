@@ -17,6 +17,10 @@ The data is collected using the [Prometheus API](https://prometheus.io/docs/prom
 - either [Prometheus, itself](https://prometheus.io/), typically deployed within the Kubernetes cluster being monitored, and where the Densify Forwarder is running
 - or an OSS/commercial observability platform which supports the Prometheus API (and resides elsewhere)
 
+### Data Retention
+
+The Forwarder typically runs as a cronjob some time after the hour and collects data for the previous hour. This means that the absolute minimum data retention required is 2h, though for contingency and data recovery scenarios it is recommended to set it on a few days. As commercial observability platforms typically have much longer data retention, this applies mainly for self-hosted Prometheus servers or OSS observability platforms.
+
 ### Supported Commercial Observability Platforms
 
 - [Amazon Managed Service for Prometheus](https://docs.aws.amazon.com/prometheus/latest/userguide/index.html)
