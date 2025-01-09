@@ -8,7 +8,7 @@ import (
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/common/sigv4"
+	"github.com/prometheus/sigv4"
 	"net/http"
 	"regexp"
 	"strconv"
