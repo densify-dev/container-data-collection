@@ -647,12 +647,13 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, labelFilter strin
 	l := len(wmhs)
 	q := append([]string{hwq.queryContext}, hwq.querySubject...)
 	query := hmh.query(q...) + labelFilter
-	var foundValues bool
+	var foundValues map[string]bool
 	for historyInterval := 0; historyInterval < common.Params.Collection.HistoryInt; historyInterval++ {
 		range5Min := common.TimeRangeForInterval(time.Duration(historyInterval))
 		if crm, _, err := common.CollectMetric(2, query, range5Min); err != nil {
 			common.LogErrorWithLevel(1, common.Warn, err, common.QueryFormat, swmh.GetMetricName(), query)
 		} else {
+			foundValues = make(map[string]bool)
 			for cluster, result := range crm {
 				for _, ss := range result.Matrix {
 					if nsName, _, hpaValue, ok := getNamespaceAndValue(hmh.typeHolder, cluster, ss); ok {
@@ -660,7 +661,7 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, labelFilter strin
 						if h, ok = findHpa(cluster, nsName, hpaValue); ok {
 							h.workload[historyInterval] = append(h.workload[historyInterval], ss.Values...)
 							if len(ss.Values) > 0 {
-								foundValues = true
+								foundValues[cluster] = true
 							}
 						}
 					}
@@ -668,13 +669,16 @@ func (hwq *hpaWorkloadQuery) getWorkload(hmh *hpaMetricHolder, labelFilter strin
 			}
 		}
 	}
-	if !foundValues {
+	if len(foundValues) == 0 {
 		return
 	}
 	clusterFiles := make(map[string]map[bool]*os.File)
 	for historyInterval := 0; historyInterval < common.Params.Collection.HistoryInt; historyInterval++ {
 		for isClassified, hMap := range hpaMaps {
 			for clName, cluster := range hMap {
+				if !foundValues[clName] {
+					continue
+				}
 				if clusterFiles[clName] == nil {
 					clusterFiles[clName] = make(map[bool]*os.File, l)
 				}
