@@ -435,7 +435,7 @@ func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 		oid := &objectId{kind: kind, name: name}
 		var obj *k8sObject
 		if obj, ok = ns.objects[oid.Key(nsName)]; !ok {
-			common.LogCluster(1, common.Error, common.ClusterFormat+" failed to find object of kind %s and name %s in namespace %s", cluster, true, cluster, kind, name, nsName)
+			common.LogCluster(1, common.Warn, common.ClusterFormat+" failed to find HPA scale target reference of kind %s and name %s in namespace %s", cluster, true, cluster, kind, name, nsName)
 			continue
 		}
 		h := newHpa(obj, values[hpaLabel], values[metricNameLabel])
