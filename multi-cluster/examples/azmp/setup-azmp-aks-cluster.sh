@@ -2,6 +2,7 @@
 
 CLUSTER_NAME=<my_azure_aks_cluster_name>
 RESOURCE_GROUP=<my_azure_aks_cluster_resourcegroup>
+WORKSPACE_RESOURCE_ID=<my_azure_monitor_workspace_resourceid>
 AZMP_ALREADY_ENABLED=1
 ADD_TO_KUBECONFIG=1
 
@@ -15,4 +16,7 @@ fi
 
 kubectl create -f ./ama-metrics-settings-configmap.yaml
 
-az aks update --enable-azure-monitor-metrics -n ${CLUSTER_NAME} -g ${RESOURCE_GROUP} --ksm-metric-labels-allow-list 'nodes=[*],namespaces=[*],pods=[*],deployments=[*],replicasets=[*],daemonsets=[*],statefulsets=[*],jobs=[*],cronjobs=[*],horizontalpodautoscalers=[*]' --ksm-metric-annotations-allow-list 'namespaces=[*]'
+az aks update --enable-azure-monitor-metrics -n ${CLUSTER_NAME} -g ${RESOURCE_GROUP} \
+    --azure-monitor-workspace-resource-id ${WORKSPACE_RESOURCE_ID} \
+    --ksm-metric-labels-allow-list 'nodes=[*],namespaces=[*],pods=[*],deployments=[*],replicasets=[*],daemonsets=[*],statefulsets=[*],jobs=[*],cronjobs=[*],horizontalpodautoscalers=[*]' \
+    --ksm-metric-annotations-allow-list 'namespaces=[*]'

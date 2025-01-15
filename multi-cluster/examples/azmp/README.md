@@ -12,7 +12,7 @@ This example shows you how to setup the data forwarder using either option. You 
 
 ## Prerequisites
 
-You need to setup the following prerequistes before deploying the data forwarder:
+You need to setup the following prerequisites before deploying the data forwarder:
 
 1. A Linux environment with `bash` and the following utilities:
 
@@ -47,11 +47,13 @@ Azure allows you to enable metrics collection from your AKS cluster and send the
 
 However, the default Azure AKS monitoring stack does not collect all of the metrics required by Densify for its container analysis, so you need to modify the default configuration:
 
-1. Edit the first four lines lines of the script, [setup-azmp-aks-cluster.sh](./setup-azmp-aks-cluster.sh) as follows:
+1. Edit the first five lines of the script, [setup-azmp-aks-cluster.sh](./setup-azmp-aks-cluster.sh) as follows:
 
 	> CLUSTER_NAME=<my_azure_aks_cluster_name>
 
 	> RESOURCE_GROUP=<my_azure_aks_cluster_resourcegroup>
+
+	> WORKSPACE_RESOURCE_ID=<my_azure_monitor_workspace_resourceid>
 
 	> AZMP_ALREADY_ENABLED=1
 	- Leave the value set to 1 if you have enabled 'Managed Prometheus' in the Azure Portal, as shown in the image above.
@@ -81,7 +83,7 @@ However, the default Azure AKS monitoring stack does not collect all of the metr
 
 4. Edit the script, [register-app-create-secret.sh](./register-app-create-secret.sh). Paste the `Resource ID` into the `AZMON_WORKSPACE_RESOURCE_URI` parameter and save the updated script.
 
-## Registering an Entra Service Principal and Creating thee Secret
+## Registering an Entra Service Principal and Creating the Secret
 
 1. In order to run PromQL queries with the Azure Managed Prometheus API, you need to register a Microsoft Entra (formerly Azure AD) service principal and assign the relevant role. See [Query Prometheus metrics using the API and PromQL](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql).
 
