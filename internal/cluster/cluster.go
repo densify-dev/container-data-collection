@@ -21,22 +21,26 @@ type clusterMetricHolder struct {
 	metric string
 }
 
+func createCluster(name string) {
+	if _, f := clusters[name]; !f {
+		clusters[name] = &cluster{
+			cpuLimit:   common.UnknownValue,
+			cpuRequest: common.UnknownValue,
+			memLimit:   common.UnknownValue,
+			memRequest: common.UnknownValue,
+		}
+	}
+}
+
 func (cmh *clusterMetricHolder) getClusterMetric(clusterName string, result model.Matrix) {
 	var cl *cluster
+	var f bool
+	if cl, f = clusters[clusterName]; !f {
+		return
+	}
 	if l := result.Len(); l > 0 {
-		var f bool
-		if cl, f = clusters[clusterName]; !f {
-			cl = &cluster{
-				cpuLimit:   common.UnknownValue,
-				cpuRequest: common.UnknownValue,
-				memLimit:   common.UnknownValue,
-				memRequest: common.UnknownValue,
-			}
-			clusters[clusterName] = cl
-		}
 		indicators[cmh.metric] = indicators[cmh.metric] + 1
 	}
-
 	for _, ss := range result {
 		value := common.LastValue(ss)
 		switch cmh.metric {
@@ -156,6 +160,9 @@ var queryWrappersMap = map[string]*node.QueryWrapper{
 var queryWrappers []*node.QueryWrapper
 
 func Metrics() {
+	for _, clusterName := range common.ClusterNames {
+		createCluster(clusterName)
+	}
 	var query string
 	range5Min := common.TimeRange()
 	cmh := &clusterMetricHolder{metric: common.Limits}

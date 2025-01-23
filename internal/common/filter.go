@@ -32,7 +32,7 @@ type Result struct {
 type ClusterResultMap map[string]*Result
 
 func NumClusters() int {
-	return len(filtersByName)
+	return len(ClusterNames)
 }
 
 func Eval(n int, eval bool) int {
@@ -83,6 +83,7 @@ func registerClusterFilter(cf *ClusterFilter) error {
 			return err
 		}
 	}
+	ClusterNames = append(ClusterNames, cf.spec.Name)
 	filtersByName[cf.spec.Name] = cf
 	lns := KeySet(cf.spec.Identifiers)
 	fp := fingerprint(lns)
@@ -104,6 +105,7 @@ type queryLabelFilter struct {
 
 var queryPerCluster = true
 var filtersByName = make(map[string]*ClusterFilter)
+var ClusterNames []string
 var noIdentifiersFilter bool
 var labelFilters = make(map[model.Fingerprint]*queryLabelFilter)
 

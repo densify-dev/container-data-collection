@@ -37,7 +37,7 @@ const (
 var entityKinds = []string{ClusterEntityKind, NodeEntityKind, NodeGroupEntityKind, ContainerEntityKind, Hpa, RqEntityKind, CrqEntityKind}
 
 func MkdirAll() error {
-	for cluster := range filtersByName {
+	for _, cluster := range ClusterNames {
 		for _, entityKind := range entityKinds {
 			if err := os.MkdirAll(filepath.Join(rootFolder, cluster, entityKind), dirPerm); err != nil {
 				return err

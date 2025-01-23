@@ -48,8 +48,8 @@ var noLogs = loggers{Empty: nil}
 var logs loggers
 
 func InitLogs() {
-	logs = make(loggers, len(filtersByName))
-	for cluster := range filtersByName {
+	logs = make(loggers, NumClusters())
+	for _, cluster := range ClusterNames {
 		logFile, err := os.OpenFile(filepath.Join(rootFolder, cluster, logFileName), logFileFlag, logFilePerm)
 		if err != nil {
 			log.Fatal(err)
