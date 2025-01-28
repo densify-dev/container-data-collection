@@ -179,12 +179,12 @@ func Metrics() {
 				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.clause))
 			}
 			query = fmt.Sprintf(`(%s / %s) * 100`, q[0], q[1])
-			wmh.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		}
 	}
 
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
-	common.PodCount.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
 	if !HasNodeExporter(range5Min) {
@@ -197,55 +197,55 @@ func Metrics() {
 
 		query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
 		query = qw.Query.Wrap(query)
-		common.CpuUtilization.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.CpuUtilization.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}`)
-		common.MemoryBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.MemoryBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
-		common.MemoryActualWorkload.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.MemoryActualWorkload.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill{}[` + common.Params.Collection.SampleRateSt + `m]))`)
-		common.OomKillEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.OomKillEvents.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`round(increase(node_cpu_core_throttles_total{}[` + common.Params.Collection.SampleRateSt + `m]))`)
-		common.CpuThrottlingEvents.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.CpuThrottlingEvents.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskReadBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskReadBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskWriteBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskWriteBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskTotalBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskTotalBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskReadOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskReadOps.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.DiskWriteOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskWriteOps.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
-		common.DiskTotalOps.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.DiskTotalOps.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetReceivedBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetReceivedBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetSentBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetSentBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetTotalBytes.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetTotalBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetReceivedPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetReceivedPackets.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetSentPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetSentPackets.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		common.NetTotalPackets.GetWorkload(query, qw.MetricField, common.NodeEntityKind)
+		common.NetTotalPackets.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 	}
 }

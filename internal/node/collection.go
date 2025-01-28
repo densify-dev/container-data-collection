@@ -165,7 +165,7 @@ func (nwp *nodeWorkloadProducer) GetEntityKind() string {
 }
 
 func (nwp *nodeWorkloadProducer) GetRowPrefixes() []string {
-	return []string{fmt.Sprintf("%s,%s", nwp.cluster, nwp.node.name)}
+	return []string{fmt.Sprintf("%s,%s", nwp.cluster, overrideNodeName(nwp.cluster, nwp.node.name))}
 }
 
 func (nwp *nodeWorkloadProducer) ShouldWrite(_ string) bool {

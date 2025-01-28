@@ -56,7 +56,17 @@ func (wmh *WorkloadMetricHolder) GetName(nt NameType, singular bool) (name strin
 }
 
 func (wmh *WorkloadMetricHolder) GetWorkload(query string, metricField []model.LabelName, entityKind string) {
-	GetWorkload(2, wmh.fileName, wmh.metricName, query, metricField, entityKind, Metric, nil)
+	wmh.GetWorkloadFieldsFunc(query, metricField, nil, entityKind)
+}
+
+// GetWorkloadFieldsFunc - call this function directly ONLY if you need to provide the FieldsFunc;
+// otherwise use GetWorkload
+func (wmh *WorkloadMetricHolder) GetWorkloadFieldsFunc(query string, metricField []model.LabelName, ff FieldsFunc, entityKind string) {
+	callDepth := 2
+	if ff == nil {
+		callDepth++
+	}
+	GetWorkload(callDepth, wmh.fileName, wmh.metricName, query, metricField, ff, entityKind, Metric, nil)
 }
 
 func (wmh *WorkloadMetricHolder) GetWorkloadQueryVariants(callDepth int, qps map[string]*QueryProcessor, entityKind string) {
@@ -146,8 +156,8 @@ type QueryProcessor struct {
 }
 
 // GetWorkload used to query for the workload data and then calls write workload
-func GetWorkload(callDepth int, fileName, metricName, query string, metricFields []model.LabelName, entityKind string, subject string, tvp QueryProvider) {
-	qps := map[string]*QueryProcessor{query: {MetricFields: metricFields}}
+func GetWorkload(callDepth int, fileName, metricName, query string, metricFields []model.LabelName, ff FieldsFunc, entityKind string, subject string, tvp QueryProvider) {
+	qps := map[string]*QueryProcessor{query: {MetricFields: metricFields, FF: ff}}
 	GetWorkloadQueryVariants(callDepth+1, fileName, metricName, qps, entityKind, subject, tvp)
 }
 

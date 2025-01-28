@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"os"
+	"strings"
 )
 
 func writeConfig() {
@@ -33,7 +34,7 @@ func writeConf(name string, cluster map[string]*node) {
 
 	for nodeName, n := range cluster {
 		opSys, instanceType := GetOSInstanceType(n.labelMap)
-		if _, err = fmt.Fprintf(configWrite, "%s,%s,%s,%s,%s", common.FormatCurrentTime(), name, nodeName, instanceType, opSys); err != nil {
+		if _, err = fmt.Fprintf(configWrite, "%s,%s,%s,%s,%s", common.FormatCurrentTime(), name, overrideNodeName(name, nodeName), instanceType, opSys); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
@@ -78,7 +79,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 
 	for nodeName, n := range cluster {
 		arch, region, zone := getArchRegionZone(n.labelMap)
-		if _, err = fmt.Fprintf(attributeWrite, "%s,%s,Nodes,%s,%s,%s,%s", name, nodeName, name, region, zone, arch); err != nil {
+		if _, err = fmt.Fprintf(attributeWrite, "%s,%s,Nodes,%s,%s,%s,%s", name, overrideNodeName(name, nodeName), name, region, zone, arch); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
@@ -112,6 +113,37 @@ func writeAttrs(name string, cluster map[string]*node) {
 			return
 		}
 	}
+}
+
+const (
+	eksProviderIdPrefix = "aws:///"
+)
+
+func overrideNodeName(cluster, nodeName string) (name string) {
+	name = nodeName
+	if n := nodes[cluster][nodeName]; n != nil {
+		// EKS node names have the form:
+		// ip-<IP address>.<AWS region>>.compute.internal
+		// This is problematic (seen in practice) as IP addresses can be recycled, therefore
+		// if a node has been torn down, another new node may get the same IP address.
+		// EKS provider id have the format:
+		// aws:///<availability zone>/<EC2 instance id>
+		// EC2 instance id is unique so we add it to the node name
+		provId := strings.ToLower(n.providerId)
+		if strings.HasPrefix(provId, eksProviderIdPrefix) {
+			s := strings.Split(provId, "/")
+			name += "--" + s[len(s)-1]
+		}
+	}
+	return
+}
+
+func overrideNodeNameFieldsFunc(cluster string, fields []string) ([]string, bool) {
+	ok := len(fields) >= 2
+	if ok {
+		fields[1] = overrideNodeName(cluster, fields[1])
+	}
+	return fields, ok
 }
 
 var nodeWorkloadWriters = common.NewWorkloadWriters()
