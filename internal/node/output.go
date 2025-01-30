@@ -138,10 +138,12 @@ func overrideNodeName(cluster, nodeName string) (name string) {
 	return
 }
 
+// overrideNodeNameFieldsFunc assumes that the LAST field is the node name
 func overrideNodeNameFieldsFunc(cluster string, fields []string) ([]string, bool) {
-	ok := len(fields) >= 2
+	l := len(fields)
+	ok := l >= 1
 	if ok {
-		fields[1] = overrideNodeName(cluster, fields[1])
+		fields[l-1] = overrideNodeName(cluster, fields[l-1])
 	}
 	return fields, ok
 }
