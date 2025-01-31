@@ -19,7 +19,7 @@ func (t *taint) String() (s string) {
 	if t != nil {
 		var val string
 		if t.value != common.Empty {
-			val = fmt.Sprintf(",=%s", t.value)
+			val = fmt.Sprintf("=%s", t.value)
 		}
 		s = fmt.Sprintf("%s%s:%s", t.key, val, t.effect)
 	}
