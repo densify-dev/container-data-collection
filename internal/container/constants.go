@@ -31,7 +31,6 @@ const (
 	autoscaler  = "autoscaler"
 	kube        = "kube"
 	rss         = "rss"
-	workingSet  = "ws"
 	condition   = "condition"
 	scaling     = "scaling"
 	limited     = "limited"

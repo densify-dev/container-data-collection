@@ -72,7 +72,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,ProviderId,K8sVersion,NodeLabels,NodeTaints"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,MemoryTotalBytes,ProviderId,K8sVersion,NodeLabels,NodeTaints"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 		return
 	}
@@ -85,7 +85,8 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 		values := []int{n.netSpeedBytes, n.cpuLimit, n.cpuRequest, n.memLimit, n.memRequest,
 			n.podsCapacity, n.cpuCapacity, n.memCapacity, n.ephemeralStorageCapacity, n.hugepages2MiCapacity,
-			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable}
+			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
+			n.memTotal}
 		for _, value := range values {
 			if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
@@ -117,6 +118,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 
 const (
 	eksProviderIdPrefix = "aws:///"
+	okeProviderIdPrefix = "ocid"
 )
 
 func overrideNodeName(cluster, nodeName string) (name string) {
@@ -129,9 +131,20 @@ func overrideNodeName(cluster, nodeName string) (name string) {
 		// EKS provider id have the format:
 		// aws:///<availability zone>/<EC2 instance id>
 		// EC2 instance id is unique so we add it to the node name
+		//
+		// OKE node names have the form:
+		// <IP address>
+		// This is problematic as IP addresses can be recycled, therefore
+		// if a node has been torn down, another new node may get the same IP address.
+		// OKE provider id have the form:
+		// ocid1.instance.oc1.<region>.<unique id>
+		// unique id is unique so we add it to the node name
 		provId := strings.ToLower(n.providerId)
 		if strings.HasPrefix(provId, eksProviderIdPrefix) {
 			s := strings.Split(provId, "/")
+			name += "--" + s[len(s)-1]
+		} else if strings.HasPrefix(provId, okeProviderIdPrefix) {
+			s := strings.Split(provId, ".")
 			name += "--" + s[len(s)-1]
 		}
 	}

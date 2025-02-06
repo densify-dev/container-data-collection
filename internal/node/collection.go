@@ -89,6 +89,8 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			setValue(&n.podsAllocatable, value)
 		case common.NetSpeedBytes:
 			setValue(&n.netSpeedBytes, value)
+		case common.MemTotal:
+			setValue(&n.memTotal, value)
 		case common.Limits:
 			switch res {
 			case common.Cpu:

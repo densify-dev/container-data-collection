@@ -107,6 +107,7 @@ const (
 	Key         = "key"
 	Value       = "value"
 	Effect      = "effect"
+	WorkingSet  = "ws"
 )
 
 // owner kind labels
@@ -146,6 +147,7 @@ var (
 	MemAllocatable        = DromedaryCase(Memory, Allocatable)
 	PodsAllocatable       = DromedaryCase(Pods, Allocatable)
 	CountPods             = Join(Slash, Count, Pods)
+	MemTotal              = DromedaryCase(Memory, Total)
 	NetSpeedBytes         = DromedaryCase(Net, Speed, Bytes)
 	ReplicaSet            = strings.ToLower(ReplicaSetOwner)
 	DaemonSet             = strings.ToLower(DaemonSetOwner)

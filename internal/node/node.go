@@ -40,14 +40,14 @@ func (ts taints) String() string {
 
 // A node structure. Used for storing attributes and config details.
 type node struct {
-	labelMap                                                                                              map[string]string
-	name                                                                                                  string
-	providerId                                                                                            string
-	k8sVersion                                                                                            string
-	netSpeedBytes, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
-	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
-	cpuLimit, cpuRequest, memLimit, memRequest                                                            int
-	taints                                                                                                taints
+	labelMap                                                                                                        map[string]string
+	name                                                                                                            string
+	providerId                                                                                                      string
+	k8sVersion                                                                                                      string
+	netSpeedBytes, memTotal, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
+	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable           int
+	cpuLimit, cpuRequest, memLimit, memRequest                                                                      int
+	taints                                                                                                          taints
 }
 
 // Map that labels and values will be stored in
@@ -87,6 +87,9 @@ func Metrics() {
 	for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
 		mh.labelName = qw.MetricField[0]
 		query = qw.Query.Wrap(`max(node_network_speed_bytes{device!~"veth.*|docker.*|cilium.*|lxc.*"}) by (node, instance)`)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+		mh.name = common.MemTotal
+		query = qw.Query.Wrap(`max(node_memory_MemTotal_bytes{}) by (node, instance)`)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 
@@ -199,11 +202,7 @@ func Metrics() {
 		query = qw.Query.Wrap(query)
 		common.CpuUtilization.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
-		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}`)
-		common.MemoryBytes.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
-
-		query = qw.Query.Wrap(`node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{})`)
-		common.MemoryActualWorkload.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		getMemoryMetrics(qw)
 
 		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill{}[` + common.Params.Collection.SampleRateSt + `m]))`)
 		common.OomKillEvents.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
@@ -457,4 +456,30 @@ func GetQueryWrappers(qws *[]*QueryWrapper, qwm map[string]*QueryWrapper) []*Que
 		}
 	}
 	return *qws
+}
+
+const (
+	memBaseQuery   = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
+	memActualQuery = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{})"
+	memWsQueryFmt  = `label_join(container_memory_working_set_bytes{id="/"}, "%s", "", "kubernetes_io_hostname", "node")`
+	utilizationFmt = `((%s) / on (%s) node_memory_MemTotal_bytes{}) * 100`
+)
+
+func getMemoryMetrics(qw *QueryWrapper) {
+	metricField := string(qw.MetricField[0])
+	var wmhms []map[string]*common.WorkloadMetricHolder
+	wmhms = append(wmhms, makeWmhMap(memBaseQuery, metricField, common.MemoryBytes, common.MemoryUtilization))
+	wmhms = append(wmhms, makeWmhMap(memActualQuery, metricField, common.MemoryActualWorkload, common.MemoryActualUtilization))
+	memWsQuery := fmt.Sprintf(memWsQueryFmt, metricField)
+	wmhms = append(wmhms, makeWmhMap(memWsQuery, metricField, common.MemoryWs, common.MemoryWsUtilization))
+	for _, wmhm := range wmhms {
+		for baseQuery, wmh := range wmhm {
+			query := qw.Query.Wrap(baseQuery)
+			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		}
+	}
+}
+
+func makeWmhMap(baseQuery, metricField string, absolute, utilization *common.WorkloadMetricHolder) map[string]*common.WorkloadMetricHolder {
+	return map[string]*common.WorkloadMetricHolder{baseQuery: absolute, fmt.Sprintf(utilizationFmt, baseQuery, metricField): utilization}
 }
