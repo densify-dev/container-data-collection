@@ -95,28 +95,40 @@ func GetCsvHeaderFormat(entityKind string, subject string) (format string, f boo
 	return
 }
 
-type IntValueFunc func(int) bool
+type ValueFunc[T Number] func(T) bool
 
-func KnownValueFunc(n int) bool {
-	return n != UnknownValue
+func KnownValueFunc[T Number](n T) bool {
+	switch any(n).(type) {
+	case float32, float64:
+		return float64(n) != UnknownValueFloat
+	default:
+		return int(n) != UnknownValue
+	}
 }
 
-func PositiveValueFunc(n int) bool {
+func PositiveValueFunc[T Number](n T) bool {
 	return n > 0
 }
 
-func PrintCSVIntValue(file *os.File, value int, last bool) error {
-	return PrintCSVIntValueConditional(file, value, last, KnownValueFunc)
+func PrintCSVNumberValue[T Number](file *os.File, value T, last bool) error {
+	return PrintCSVNumberValueConditional(file, value, last, KnownValueFunc)
 }
 
-func PrintCSVPositiveIntValue(file *os.File, value int, last bool) error {
-	return PrintCSVIntValueConditional(file, value, last, PositiveValueFunc)
+func PrintCSVPositiveNumberValue[T Number](file *os.File, value T, last bool) error {
+	return PrintCSVNumberValueConditional(file, value, last, PositiveValueFunc)
 }
 
-func PrintCSVIntValueConditional(file *os.File, value int, last bool, f IntValueFunc) error {
+func PrintCSVNumberValueConditional[T Number](file *os.File, value T, last bool, f ValueFunc[T]) error {
 	sVal := ""
 	if f(value) {
-		sVal = fmt.Sprintf("%d", value)
+		var frmt string
+		switch any(value).(type) {
+		case float32, float64:
+			frmt = "%f"
+		default:
+			frmt = "%d"
+		}
+		sVal = fmt.Sprintf(frmt, value)
 	}
 	return PrintCSVStringValue(file, sVal, last)
 }

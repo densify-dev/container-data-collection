@@ -383,8 +383,14 @@ func makeHpaWorkload() [][]model.SamplePair {
 	return make([][]model.SamplePair, common.Params.Collection.HistoryInt)
 }
 
-func newHpa(obj *k8sObject, name, metricName string) *hpa {
-	h := &hpa{obj: obj, name: name, metricName: metricName, labels: make(map[string]string)}
+func newHpa(obj *k8sObject, name, metricName, metricTargetType string, metricTargetValue float64) *hpa {
+	h := &hpa{
+		obj:               obj,
+		name:              name,
+		metricName:        metricName,
+		metricTargetType:  metricTargetType,
+		metricTargetValue: metricTargetValue,
+		labels:            make(map[string]string)}
 	if obj != nil {
 		obj.hpa = h
 	}
@@ -426,7 +432,7 @@ func findHpa(cluster, nsName, hpaName string) (h *hpa, ok bool) {
 func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 	for _, ss := range result {
 		hpaLabel := th.getTypeLabelName()
-		nsName, ns, values, ok := getNamespaceAndValues([]string{strKind, strName, hpaLabel, metricNameLabel}, cluster, ss)
+		nsName, ns, values, ok := getNamespaceAndValues([]string{strKind, strName, hpaLabel, metricNameLabel, metricTargetTypeLabel}, cluster, ss)
 		if !ok {
 			continue
 		}
@@ -438,7 +444,8 @@ func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 			common.LogCluster(1, common.Warn, common.ClusterFormat+" failed to find HPA scale target reference of kind %s and name %s in namespace %s", cluster, true, cluster, kind, name, nsName)
 			continue
 		}
-		h := newHpa(obj, values[hpaLabel], values[metricNameLabel])
+		metricTargetValue := common.LastValue(ss)
+		h := newHpa(obj, values[hpaLabel], values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
 		h.addHpa(cluster, nsName, values[hpaLabel])
 		h.addToLabelMap(ss)
 	}
@@ -459,13 +466,13 @@ func (th *typeHolder) getHpaMetricString(cluster string, result model.Matrix) {
 				oid.kind = trg
 				var obj *k8sObject
 				if obj, ok = ns.objects[oid.Key(nsName)]; ok {
-					h = newHpa(obj, hpaValue, common.Empty)
+					h = newHpa(obj, hpaValue, common.Empty, common.Empty, common.UnknownValueFloat)
 					break
 				}
 			}
 			if !ok {
 				// no luck finding target
-				h = newHpa(nil, hpaValue, common.Empty)
+				h = newHpa(nil, hpaValue, common.Empty, common.Empty, common.UnknownValueFloat)
 			}
 			h.addHpa(cluster, nsName, hpaValue)
 		}

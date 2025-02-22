@@ -111,7 +111,7 @@ func writeConf(name string, cluster map[string]*nodeGroup) {
 		}
 		values := []int{ng.cpuCapacity, ng.cpuCapacity, 1, 1, ng.memCapacity}
 		for _, value := range values {
-			if err = common.PrintCSVIntValue(configWrite, value, false); err != nil {
+			if err = common.PrintCSVNumberValue(configWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeGroupEntityKind)
 				return
 			}
@@ -154,7 +154,7 @@ func writeAttrs(name string, cluster map[string]*nodeGroup) {
 		}
 		values := []int{ng.cpuLimit, ng.cpuRequest, ng.memLimit, ng.memRequest, ng.currentSize}
 		for _, value := range values {
-			if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+			if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeGroupEntityKind)
 				return
 			}

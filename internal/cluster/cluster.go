@@ -128,7 +128,7 @@ func writeAttrs(name string, cl *cluster) {
 	}
 	values := []int{cl.cpuLimit, cl.cpuRequest, cl.memLimit, cl.memRequest}
 	for _, value := range values {
-		if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+		if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.ClusterEntityKind)
 			return
 		}

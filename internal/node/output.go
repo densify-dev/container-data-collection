@@ -45,7 +45,7 @@ func writeConf(name string, cluster map[string]*node) {
 		values := []int{n.cpuCapacity, n.cpuCapacity, 1, 1, memCap, n.netSpeedBytes}
 		last := len(values) - 1
 		for i, value := range values {
-			if err = common.PrintCSVIntValue(configWrite, value, i == last); err != nil {
+			if err = common.PrintCSVNumberValue(configWrite, value, i == last); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 				return
 			}
@@ -88,7 +88,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
 			n.memTotal}
 		for _, value := range values {
-			if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+			if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 				return
 			}

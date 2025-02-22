@@ -189,7 +189,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 				rq.cpuLimit, rq.cpuRequest, rq.memLimit, rq.memRequest, rq.podsLimit}
 			last := len(values) - 1
 			for i, value := range values {
-				if err = common.PrintCSVIntValue(attributeWrite, value, i == last); err != nil {
+				if err = common.PrintCSVNumberValue(attributeWrite, value, i == last); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.RqEntityKind)
 					return
 				}

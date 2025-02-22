@@ -55,7 +55,7 @@ func writeConf(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVPositiveIntValue(configWrite, c.memory, false); err != nil {
+				if err = common.PrintCSVPositiveNumberValue(configWrite, c.memory, false); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
@@ -108,7 +108,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,QosClass"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,QosClass"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -133,7 +133,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 				}
 				values := []int{c.cpuLimit, c.cpuRequest, c.memLimit, c.memRequest}
 				for _, value := range values {
-					if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+					if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 						return
 					}
@@ -142,7 +142,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVIntValue(attributeWrite, obj.currentSize, false); err != nil {
+				if err = common.PrintCSVNumberValue(attributeWrite, obj.currentSize, false); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
@@ -150,7 +150,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVIntValue(attributeWrite, c.restarts, false); err != nil {
+				if err = common.PrintCSVNumberValue(attributeWrite, c.restarts, false); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
@@ -164,7 +164,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 				}
 				values = []int{ns.cpuRequest, ns.cpuLimit, ns.memRequest, ns.memLimit, ns.podsLimit}
 				for _, value := range values {
-					if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+					if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 						return
 					}
@@ -221,7 +221,7 @@ func writeHpaAttrs(name string, cluster map[string]map[string]*hpa) {
 func (h *hpa) writeAttributes(attributeWrite *os.File, cluster, entityKind string, last bool) error {
 	var err error
 	if h == nil {
-		if err = common.PrintCSVStringValue(attributeWrite, ",,", last); err != nil {
+		if err = common.PrintCSVStringValue(attributeWrite, ",,,,", last); err != nil {
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}
@@ -238,7 +238,15 @@ func (h *hpa) writeAttributes(attributeWrite *os.File, cluster, entityKind strin
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}
-		if err = common.PrintCSVStringValue(attributeWrite, h.metricName, last); err != nil {
+		if err = common.PrintCSVStringValue(attributeWrite, h.metricName, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, h.metricTargetType, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		if err = common.PrintCSVNumberValue(attributeWrite, h.metricTargetValue, last); err != nil {
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}

@@ -151,11 +151,13 @@ func (obj *k8sObject) isRunningRelevant() bool {
 type clusterOwnerships map[string]*ownership
 
 type hpa struct {
-	obj        *k8sObject
-	name       string
-	metricName string
-	labels     map[string]string
-	workload   [][]model.SamplePair
+	obj               *k8sObject
+	name              string
+	metricName        string
+	metricTargetType  string
+	metricTargetValue float64
+	labels            map[string]string
+	workload          [][]model.SamplePair
 }
 
 type hpaMap map[string]map[string]map[string]*hpa
@@ -571,9 +573,9 @@ func Metrics() {
 	var totals int
 	for _, th := range hpaTypeHolders {
 		hmh := &hpaMetricHolder{objectMetricHolder: &objectMetricHolder{typeHolder: th}}
-		query = fmt.Sprintf("%s%s * on (namespace, %s) group_left(%s) %s%s",
-			hmh.query(common.InfoSt), common.Braces, th.getTypeLabelName(), metricNameLabel,
-			hmh.query(spec, target, common.Metric), common.Braces)
+		query = fmt.Sprintf("%s%s * on (namespace, %s) group_left(%s, %s) %s%s",
+			hmh.query(common.InfoSt), common.Braces, th.getTypeLabelName(),
+			metricNameLabel, metricTargetTypeLabel, hmh.query(spec, target, common.Metric), common.Braces)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, hmh.getHpa)
 		query = hmh.query(common.Labels) + common.Braces
 		if n, err = common.CollectAndProcessMetric(query, range5Min, hmh.getHpaMetricString); n > 0 {

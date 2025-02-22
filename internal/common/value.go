@@ -3,9 +3,10 @@ package common
 import "github.com/prometheus/common/model"
 
 const (
-	UnknownValue = -1
-	mib          = 1024 * 1024
-	milli        = 1000
+	UnknownValue      = -1
+	UnknownValueFloat = -1.0
+	mib               = 1024 * 1024
+	milli             = 1000
 )
 
 type ConvFunc[N Number] func(N) N

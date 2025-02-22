@@ -225,7 +225,7 @@ func writeAttrs(name string, cluster map[string]*crq) {
 		values := []int{clrq.usageCpuLimit, clrq.usageCpuRequest, clrq.usageMemLimit, clrq.usageMemRequest, clrq.usagePodsLimit,
 			clrq.cpuLimit, clrq.cpuRequest, clrq.memLimit, clrq.memRequest, clrq.podsLimit}
 		for _, value := range values {
-			if err = common.PrintCSVIntValue(attributeWrite, value, false); err != nil {
+			if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.CrqEntityKind)
 				return
 			}
