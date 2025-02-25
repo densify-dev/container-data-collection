@@ -201,7 +201,7 @@ func writeHpaAttrs(name string, cluster map[string]map[string]*hpa) {
 			common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,HpaName,HpaLabels,HpaTargetMetricName"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.Hpa)
 		return
 	}
