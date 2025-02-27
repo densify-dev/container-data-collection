@@ -8,8 +8,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/densify-dev/container-config v1.0.15 h1:Ox8R5LxD7eTbNDjNKC2CSdzWlzJSF9nCEfly6KQfUJM=
-github.com/densify-dev/container-config v1.0.15/go.mod h1:oJEfzMxiJkbIED1wfUdH/HMOGFw4/Zxd2tZFxcoI4Os=
+github.com/densify-dev/container-config v1.0.16 h1:IhumZJXTzwRoxFprcEU8cjlhm6rVP6fkcutRxv/pl4w=
+github.com/densify-dev/container-config v1.0.16/go.mod h1:oJEfzMxiJkbIED1wfUdH/HMOGFw4/Zxd2tZFxcoI4Os=
 github.com/densify-dev/net-utils v1.0.8 h1:z3pYOKGwlLK0s/au7fVEH5YelncLGWOClQmfblvTDb8=
 github.com/densify-dev/net-utils v1.0.8/go.mod h1:gh71E6oGKIb4mGZPdw0BskhwLwK8eqkgrngiswAaWAY=
 github.com/fatih/color v1.16.0 h1:zmkK9Ngbjj+K0yRhTVONQh1p/HknKYSlNT+vZCzyokM=

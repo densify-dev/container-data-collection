@@ -6,7 +6,7 @@ go 1.23
 godebug x509negativeserial=1
 
 require (
-	github.com/densify-dev/container-config v1.0.15
+	github.com/densify-dev/container-config v1.0.16
 	github.com/densify-dev/net-utils v1.0.8
 	github.com/iancoleman/strcase v0.3.0
 	github.com/prometheus/client_golang v1.20.5
