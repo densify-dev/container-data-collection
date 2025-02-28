@@ -461,7 +461,7 @@ func GetQueryWrappers(qws *[]*QueryWrapper, qwm map[string]*QueryWrapper) []*Que
 const (
 	memBaseQuery   = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
 	memActualQuery = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{})"
-	memWsQueryFmt  = `label_join(container_memory_working_set_bytes{id="/"}, "%s", "", "kubernetes_io_hostname", "node")`
+	memWsQueryFmt  = `label_replace(label_replace(container_memory_working_set_bytes{id="/"}, "%s", "$1", "node", "(.+)"), "%s", "$1", "kubernetes_io_hostname", "(.+)")`
 	utilizationFmt = `((%s) / on (%s) node_memory_MemTotal_bytes{}) * 100`
 )
 
@@ -470,7 +470,7 @@ func getMemoryMetrics(qw *QueryWrapper) {
 	var wmhms []map[string]*common.WorkloadMetricHolder
 	wmhms = append(wmhms, makeWmhMap(memBaseQuery, metricField, common.MemoryBytes, common.MemoryUtilization))
 	wmhms = append(wmhms, makeWmhMap(memActualQuery, metricField, common.MemoryActualWorkload, common.MemoryActualUtilization))
-	memWsQuery := fmt.Sprintf(memWsQueryFmt, metricField)
+	memWsQuery := fmt.Sprintf(memWsQueryFmt, metricField, metricField)
 	wmhms = append(wmhms, makeWmhMap(memWsQuery, metricField, common.MemoryWs, common.MemoryWsUtilization))
 	for _, wmhm := range wmhms {
 		for baseQuery, wmh := range wmhm {
