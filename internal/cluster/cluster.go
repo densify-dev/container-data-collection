@@ -204,46 +204,46 @@ func Metrics() {
 		query = fmtQuery(`avg(sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100)`, qw, 1, 3)
 		common.CpuUtilization.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = `avg(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`
+		query = `sum(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`
 		common.MemoryBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = `avg(node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}))`
+		query = `sum(node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{}))`
 		common.MemoryActualWorkload.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_disk_read_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_disk_read_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.DiskReadBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_disk_written_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_disk_written_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.DiskWriteBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_disk_read_bytes_total{device!~"dm-.*"}[%sm]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 2, 1)
+		query = fmtQuery(`sum(sum(irate(node_disk_read_bytes_total{device!~"dm-.*"}[%sm]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 2, 1)
 		common.DiskTotalBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_disk_reads_completed_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_disk_reads_completed_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.DiskReadOps.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_disk_writes_completed_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_disk_writes_completed_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.DiskWriteOps.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum((irate(node_disk_reads_completed_total{device!~"dm-.*"}[%sm]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[%sm]))) by (%s))`, qw, 2, 1)
+		query = fmtQuery(`sum(sum((irate(node_disk_reads_completed_total{device!~"dm-.*"}[%sm]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[%sm]))) by (%s))`, qw, 2, 1)
 		common.DiskTotalOps.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.NetReceivedBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.NetSentBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 2, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 2, 1)
 		common.NetTotalBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.NetReceivedPackets.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 1, 1)
 		common.NetSentPackets.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = fmtQuery(`avg(sum(irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 2, 1)
+		query = fmtQuery(`sum(sum(irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[%sm])) by (%s))`, qw, 2, 1)
 		common.NetTotalPackets.GetWorkload(query, nil, common.ClusterEntityKind)
 	}
 }

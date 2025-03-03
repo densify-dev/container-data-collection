@@ -286,33 +286,33 @@ const (
 var queryWrappersMap = map[string]*node.QueryWrapper{
 	node.HasInstanceLabelPodIp: {
 		Query: &common.WorkloadQueryWrapper{
-			Prefix: "avg(max(label_replace(",
+			Prefix: "sum(max(label_replace(",
 			Suffix: byPodIpSuffix,
 		},
 		SumQuery: &common.WorkloadQueryWrapper{
-			Prefix: "avg(sum(label_replace(",
+			Prefix: "sum(sum(label_replace(",
 			Suffix: byPodIpSuffix,
 		},
 		MetricField: []model.LabelName{common.Node},
 	},
 	node.HasNodeLabel: {
 		Query: &common.WorkloadQueryWrapper{
-			Prefix: "avg(",
+			Prefix: "sum(",
 			Suffix: workloadNodeGroupSuffix,
 		},
 		SumQuery: &common.WorkloadQueryWrapper{
-			Prefix: "avg(sum(",
+			Prefix: "sum(sum(",
 			Suffix: `) by (node)` + workloadNodeGroupSuffix,
 		},
 		MetricField: []model.LabelName{common.Node},
 	},
 	node.HasInstanceLabelOther: {
 		Query: &common.WorkloadQueryWrapper{
-			Prefix: "avg(label_replace(",
+			Prefix: "sum(label_replace(",
 			Suffix: `, "node", "$1", "instance", "(.*)")` + workloadNodeGroupSuffix,
 		},
 		SumQuery: &common.WorkloadQueryWrapper{
-			Prefix: "avg(label_replace(sum(",
+			Prefix: "sum(label_replace(sum(",
 			Suffix: `) by (instance), "node", "$1", "instance", "(.*)")` + workloadNodeGroupSuffix,
 		},
 		MetricField: []model.LabelName{common.Instance},
@@ -364,20 +364,20 @@ func Metrics() {
 		for _, qualifier := range qualifiers {
 			for _, f := range common.FoundIndicatorCounter(foundUnified, qualifier) {
 				for res, coreQuery := range resourceCoreQueries[qualifier][f] {
-					query = fmt.Sprintf("avg(sum(%s%s) by (node)%s", coreQuery, operands[res], nodeGroupSuffix)
+					query = fmt.Sprintf("sum(sum(%s%s) by (node)%s", coreQuery, operands[res], nodeGroupSuffix)
 					ngmh.metric = common.DromedaryCase(res, qualifier)
 					_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
 				}
 			}
 		}
-		query = `avg(kube_node_status_capacity{} * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `,resource)`
+		query = `sum(kube_node_status_capacity{} * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `,resource)`
 		ngmh.metric = common.Capacity
 		var n int
 		if n, err = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric); err != nil || n < common.NumClusters() {
-			query = `avg(kube_node_status_capacity_cpu_cores{}` + nodeGroupSuffix
+			query = `sum(kube_node_status_capacity_cpu_cores{}` + nodeGroupSuffix
 			ngmh.metric = common.CpuCapacity
 			_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
-			query = `avg(kube_node_status_capacity_memory_bytes{}` + operands[common.Memory] + nodeGroupSuffix
+			query = `sum(kube_node_status_capacity_memory_bytes{}` + operands[common.Memory] + nodeGroupSuffix
 			ngmh.metric = common.MemCapacity
 			_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
 		}
@@ -401,13 +401,13 @@ func Metrics() {
 	for _, qw := range node.GetQueryWrappers(&queryWrappers, queryWrappersMap) {
 
 		query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
-		query = qw.Query.Wrap(query)
+		query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
 		getWorkload(common.CpuUtilization, query, ngl)
 
 		query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
 		getWorkload(common.MemoryBytes, query, ngl)
 
-		query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}))`)
+		query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{}))`)
 		getWorkload(common.MemoryActualWorkload, query, ngl)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)

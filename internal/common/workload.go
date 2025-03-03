@@ -119,15 +119,15 @@ func FilterTerminatedContainers(prefix, suffix string) string {
 
 var conditionalQueries = map[bool][]string{
 	true: {
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="cpu"}`, `) by (node)%s)`),
+		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests{resource="cpu"}`, `) by (node)%s)`),
 		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="cpu"}`, `) by (node) / sum(kube_node_status_allocatable{resource="cpu"}) by (node)%s) * 100`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024`, `) by (node)%s)`),
+		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024`, `) by (node)%s)`),
 		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024`, `) by (node) / sum(kube_node_status_allocatable{resource="memory"}/1024/1024) by (node)%s) * 100`),
 	},
 	false: {
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node)%s)`),
+		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node)%s)`),
 		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node)%s)`),
+		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node)%s)`),
 		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node) / sum(kube_node_status_allocatable_memory_bytes{}/1024/1024) by (node)%s) * 100`),
 	},
 }

@@ -458,6 +458,10 @@ func GetQueryWrappers(qws *[]*QueryWrapper, qwm map[string]*QueryWrapper) []*Que
 	return *qws
 }
 
+func SumToAverage(query string) string {
+	return strings.Replace(query, "sum(", "avg(", 1)
+}
+
 const (
 	memBaseQuery   = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
 	memActualQuery = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{})"

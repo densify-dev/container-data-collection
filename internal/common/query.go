@@ -135,3 +135,23 @@ type WorkloadQueryWrapper struct {
 func (wqw *WorkloadQueryWrapper) Wrap(query string) string {
 	return wqw.Prefix + query + wqw.Suffix
 }
+
+type WrapperGenerator func(string) string
+
+func (wqw *WorkloadQueryWrapper) GenerateWrapper(wgPrefix, wgSuffix WrapperGenerator) (nwqw *WorkloadQueryWrapper) {
+	if wqw != nil {
+		nwqw = &WorkloadQueryWrapper{
+			Prefix: generateOrOrigin(wqw.Prefix, wgPrefix),
+			Suffix: generateOrOrigin(wqw.Suffix, wgSuffix),
+		}
+	}
+	return
+}
+
+func generateOrOrigin(s string, wg WrapperGenerator) string {
+	if wg == nil {
+		return s
+	} else {
+		return wg(s)
+	}
+}

@@ -528,12 +528,13 @@ func newAggregatorWorkloadMetricHolder(aggregator string, workloadSuffix bool, m
 }
 
 type workloadQuery struct {
-	metricName   string
-	baseQuery    string
-	wqwIdx       int
-	hasSuffix    bool
-	aggregators  map[string]string
-	groupClauses map[string]*queryProcessorBuilder
+	metricName      string
+	baseQuery       string
+	wqwIdx          int
+	hasSuffix       bool
+	aggregators     map[string]string
+	aggregatorNames map[string]string
+	groupClauses    map[string]*queryProcessorBuilder
 }
 
 func (th *typeHolder) containerFields(cluster string, fields []string) (cf []string, ok bool) {
@@ -572,7 +573,11 @@ func (th *typeHolder) containerFields(cluster string, fields []string) (cf []str
 
 func getWorkload(wq *workloadQuery) {
 	for aggregator, aggSuffix := range wq.aggregators {
-		wmh := newAggregatorWorkloadMetricHolder(aggregator, wq.hasSuffix, wq.metricName)
+		var agg string
+		if agg, _ = wq.aggregatorNames[aggregator]; agg == common.Empty {
+			agg = aggregator
+		}
+		wmh := newAggregatorWorkloadMetricHolder(agg, wq.hasSuffix, wq.metricName)
 		for _, lh := range labelHolders {
 			queries := make(map[string]*common.QueryProcessor, len(wq.groupClauses))
 			if lh.detected {

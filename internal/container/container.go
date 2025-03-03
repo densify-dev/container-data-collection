@@ -640,7 +640,7 @@ func Metrics() {
 	getWorkload(wq)
 
 	wq.metricName = common.WorkingSet
-	wq.baseQuery = fmt.Sprintf(`max(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`sum(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
 	// container_fs_usage_bytes is an issue if the k8s cluster container runtime is containerd, see
@@ -665,7 +665,8 @@ func Metrics() {
 	wq.metricName = restarts
 	wq.wqwIdx = containerIdx
 	wq.hasSuffix = false
-	wq.aggregators = map[string]string{common.Max: common.Empty}
+	wq.aggregators = map[string]string{common.Sum: common.Empty}
+	wq.aggregatorNames = map[string]string{common.Sum: common.Max}
 	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s)`, common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
