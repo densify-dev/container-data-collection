@@ -232,8 +232,10 @@ func (ngh *nodeGroupHolder) createNodeGroup(cluster string, result model.Matrix)
 				labelMap:    make(map[string]string),
 			}
 		}
-		nodeGroups[cluster][nodeGroupName].nodes = nodeGroups[cluster][nodeGroupName].nodes + nodeName + common.Or
-		nodeGroups[cluster][nodeGroupName].currentSize++
+		if !strings.Contains(nodeGroups[cluster][nodeGroupName].nodes, nodeName) {
+			nodeGroups[cluster][nodeGroupName].nodes = nodeGroups[cluster][nodeGroupName].nodes + nodeName + common.Or
+			nodeGroups[cluster][nodeGroupName].currentSize++
+		}
 	}
 	getNodeGroupMetricString(cluster, result, ngh.nodeGroupLabel)
 }
