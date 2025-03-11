@@ -14,6 +14,7 @@
 | node_memory_Cached_bytes                 | Memory page cache bytes         |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_memory_MemFree_bytes                | Raw memory utilization          |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_memory_MemTotal_bytes               | Total memory bytes              |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
+| node_memory_SReclaimable_bytes           | Memory slab reclaimable bytes              |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_network_receive_bytes_<br/>total    | Raw net received utilization    |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_network_receive_packets_<br/>total  | Network packets received        |       | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | node_network_speed_bytes                 | Network speed                   |       | :white_check_mark: |                    |                    |        |         |

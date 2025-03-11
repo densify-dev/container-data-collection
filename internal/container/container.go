@@ -121,12 +121,12 @@ func cmpQosClasses(qc1, qc2 string) int {
 // k8sObject is used to hold information related to the highest owner of any containers
 type k8sObject struct {
 	*objectId
-	containers            map[string]*container
-	currentSize, restarts int
-	createTime            time.Time
-	labelMap              map[string]string
-	hpa                   *hpa
-	qosClass              string
+	containers  map[string]*container
+	currentSize int
+	createTime  time.Time
+	labelMap    map[string]string
+	hpa         *hpa
+	qosClass    string
 }
 
 // container is used to hold information related to containers
@@ -337,7 +337,6 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 				objectId:    owner,
 				containers:  make(map[string]*container),
 				currentSize: common.UnknownValue,
-				restarts:    common.UnknownValue,
 				labelMap:    make(map[string]string),
 			}
 			ns.objects[ownerKey] = obj
@@ -348,7 +347,6 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			cpuRequest: common.UnknownValue,
 			memLimit:   common.UnknownValue,
 			memRequest: common.UnknownValue,
-			restarts:   common.UnknownValue,
 			powerState: common.UnknownValue,
 			name:       containerName,
 			labelMap:   make(map[string]string),

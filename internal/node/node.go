@@ -60,6 +60,8 @@ type reservationPercentQuery struct {
 
 // Metrics a global func for collecting node level metrics in prometheus
 func Metrics() {
+	common.ResolveMetrics(map[string]common.ResolveMetricFunc{memSReclaimable: additionalMemActualMetrics})
+
 	var query string
 	var err error
 	range5Min := common.TimeRange()
@@ -463,19 +465,37 @@ func SumToAverage(query string) string {
 }
 
 const (
-	memBaseQuery   = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
-	memActualQuery = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{})"
-	memWsQueryFmt  = `label_replace(label_replace(container_memory_working_set_bytes{id="/"}, "%s", "$1", "node", "(.+)"), "%s", "$1", "kubernetes_io_hostname", "(.+)")`
-	utilizationFmt = `((%s) / on (%s) node_memory_MemTotal_bytes{}) * 100`
+	memSReclaimable                 = "node_memory_SReclaimable_bytes"
+	memBaseQuery                    = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
+	memActualQueryFmt               = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}%s)"
+	memBaseWsQuery                  = `container_memory_working_set_bytes{id="/"}`
+	k8sIoHostname                   = "kubernetes_io_hostname"
+	utilizationFmt                  = `((%s) / on (%s) %s) * 100`
+	utilizationBaseQueryTotal       = `node_memory_MemTotal_bytes{}`
+	utilizationBaseQueryAllocatable = `kube_node_status_allocatable{resource="memory"}`
 )
 
+var memActualAdditionalMetrics string
+
+func additionalMemActualMetrics(_ string, name string) {
+	memActualAdditionalMetrics += fmt.Sprintf(" + %s{}", name)
+}
+
+var utilizationBaseQueries = map[bool]string{
+	true:  utilizationBaseQueryTotal,
+	false: utilizationBaseQueryAllocatable,
+}
+
+func GetMemActualQuery() string {
+	return fmt.Sprintf(memActualQueryFmt, memActualAdditionalMetrics)
+}
+
 func getMemoryMetrics(qw *QueryWrapper) {
-	metricField := string(qw.MetricField[0])
 	var wmhms []map[string]*common.WorkloadMetricHolder
-	wmhms = append(wmhms, makeWmhMap(memBaseQuery, metricField, common.MemoryBytes, common.MemoryUtilization))
-	wmhms = append(wmhms, makeWmhMap(memActualQuery, metricField, common.MemoryActualWorkload, common.MemoryActualUtilization))
-	memWsQuery := fmt.Sprintf(memWsQueryFmt, metricField, metricField)
-	wmhms = append(wmhms, makeWmhMap(memWsQuery, metricField, common.MemoryWs, common.MemoryWsUtilization))
+	wmhms = append(wmhms, makeWmhMap(memBaseQuery, common.MemoryBytes, common.MemoryUtilization, qw, true))
+	wmhms = append(wmhms, makeWmhMap(GetMemActualQuery(), common.MemoryActualWorkload, common.MemoryActualUtilization, qw, true))
+	memWsQuery := labelReplace(labelReplace(labelReplace(memBaseWsQuery, common.Instance, common.Node, hasValue), common.Instance, k8sIoHostname, hasValue), common.Node, common.Instance, always)
+	wmhms = append(wmhms, makeWmhMap(memWsQuery, common.MemoryWs, common.MemoryWsUtilization, qw, false))
 	for _, wmhm := range wmhms {
 		for baseQuery, wmh := range wmhm {
 			query := qw.Query.Wrap(baseQuery)
@@ -484,6 +504,41 @@ func getMemoryMetrics(qw *QueryWrapper) {
 	}
 }
 
-func makeWmhMap(baseQuery, metricField string, absolute, utilization *common.WorkloadMetricHolder) map[string]*common.WorkloadMetricHolder {
-	return map[string]*common.WorkloadMetricHolder{baseQuery: absolute, fmt.Sprintf(utilizationFmt, baseQuery, metricField): utilization}
+func makeWmhMap(baseQuery string, absolute, utilization *common.WorkloadMetricHolder, qw *QueryWrapper, totalBasedUtilization bool) map[string]*common.WorkloadMetricHolder {
+	mf := qw.MetricField[0]
+	var divisor string
+	utilizationBaseQuery := utilizationBaseQueries[totalBasedUtilization]
+	if totalBasedUtilization || mf != common.Instance {
+		divisor = utilizationBaseQuery
+	} else {
+		divisor = labelReplace(utilizationBaseQuery, common.Instance, common.Node, always)
+	}
+	utilizationQuery := fmt.Sprintf(utilizationFmt, baseQuery, mf, divisor)
+	return map[string]*common.WorkloadMetricHolder{baseQuery: absolute, utilizationQuery: utilization}
+}
+
+type labelReplaceCondition int
+
+const (
+	hasValue labelReplaceCondition = iota
+	always
+)
+
+const (
+	hasValueStr = "(.+)"
+	alwaysStr   = "(.*)"
+)
+
+func (lrc labelReplaceCondition) String() (s string) {
+	switch lrc {
+	case hasValue:
+		s = hasValueStr
+	case always:
+		s = alwaysStr
+	}
+	return
+}
+
+func labelReplace(query, dstLabel, srcLabel string, lrc labelReplaceCondition) string {
+	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "%s")`, query, dstLabel, srcLabel, lrc.String())
 }

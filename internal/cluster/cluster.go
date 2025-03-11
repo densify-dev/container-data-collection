@@ -207,7 +207,7 @@ func Metrics() {
 		query = `sum(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`
 		common.MemoryBytes.GetWorkload(query, nil, common.ClusterEntityKind)
 
-		query = `sum(node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{} + node_memory_SReclaimable_bytes{}))`
+		query = fmt.Sprintf("sum(%s)", node.GetMemActualQuery())
 		common.MemoryActualWorkload.GetWorkload(query, nil, common.ClusterEntityKind)
 
 		query = fmtQuery(`sum(sum(irate(node_disk_read_bytes_total{device!~"dm-.*"}[%sm])) by (%s))`, qw, 1, 1)

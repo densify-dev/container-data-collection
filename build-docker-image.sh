@@ -65,7 +65,7 @@ fi
 
 # full name of ubi9 image
 if [ "${baseImageArg}" == "ubi9" ]; then
-    baseImage="registry.access.redhat.com/ubi9/ubi-minimal"
+    baseImage="redhat/ubi9-minimal"
 else
     baseImage="${baseImageArg}"
 fi
