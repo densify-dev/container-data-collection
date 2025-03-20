@@ -40,7 +40,7 @@ data :
             username: <Prometheus basic auth username / name of file containing this info>
             password: <Prometheus basic auth password / name of file containing this info>
     #    bearer_token: /var/run/secrets/kubernetes.io/serviceaccount/token # required by some observability platforms; the value can be the token or name of file containing it
-    #    ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
+    #    ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
     #    sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
     #        region: <AWS region, mandatory>
     #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty
