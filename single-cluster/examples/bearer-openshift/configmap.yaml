@@ -47,7 +47,7 @@ data :
     # The value of this parameter may be either the token itself or a name of file containing it.
     # Example (using k8s service account token):
         bearer_token: /var/run/secrets/kubernetes.io/serviceaccount/token
-        ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        ca_cert: /var/run/secrets/kubernetes.io/serviceaccount/service-ca.crt
     #    sigv4: # required for Amazon Managed Prometheus (see https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-onboard-query-APIs.html)
     #        region: <AWS region, mandatory>
     #       # if running on AWS / EKS under a service account with the appropriate IAM roles, all other sigv4 attributes can be left empty

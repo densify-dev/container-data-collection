@@ -32,11 +32,11 @@ You need to setup the following prerequistes before deploying the data forwarder
 
 2. Create the service account:
 
-    `oc create -f serviceaccount.yaml`
+    `oc create -f serviceaccount.yaml -n <namespace>`
 
 	or
 
-    `kubectl create -f serviceaccount.yaml`
+    `kubectl create -f serviceaccount.yaml -n <namespace>`
 
 3. Create the cluster role:
 

@@ -1,11 +1,24 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: densify
+  name: densify-1
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: densify
+subjects:
+- kind: ServiceAccount
+  name: densify
+  namespace: <namespace using for Forwarder>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: densify-2
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
 subjects:
 - kind: ServiceAccount
   name: densify
