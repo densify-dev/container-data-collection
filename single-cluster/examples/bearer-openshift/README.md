@@ -46,9 +46,9 @@ You need to setup the following prerequistes before deploying the data forwarder
 
     `kubectl create -f clusterrole.yaml`
 
-4. Edit `clusterrolebinding.yaml` to set the namespace, in which to run the data forwarder:
+4. Edit `clusterrolebinding.yaml` to set the namespace, in which to run the data forwarder (in two locations!)
 
-5. Create the cluster role binding:
+5. Create the cluster role bindings:
 
     `oc create -f clusterrolebinding.yaml`
 
