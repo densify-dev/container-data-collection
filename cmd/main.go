@@ -43,12 +43,6 @@ func main() {
 	}
 	// first get the kubernetes version information, to be used by cluster and nodes
 	kubernetes.Metrics()
-	if includes(common.ContainerEntityKind) {
-		container.Metrics()
-		container.Events()
-	} else {
-		common.LogAll(1, common.Info, "Skipping container data collection")
-	}
 	if includes(common.NodeEntityKind) {
 		node.Metrics()
 	} else {
@@ -63,6 +57,12 @@ func main() {
 		cluster.Metrics()
 	} else {
 		common.LogAll(1, common.Info, "Skipping cluster data collection")
+	}
+	if includes(common.ContainerEntityKind) {
+		container.Metrics()
+		container.Events()
+	} else {
+		common.LogAll(1, common.Info, "Skipping container data collection")
 	}
 	if includes(common.Quota) {
 		crq.Metrics()

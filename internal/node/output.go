@@ -161,4 +161,19 @@ func overrideNodeNameFieldsFunc(cluster string, fields []string) ([]string, bool
 	return fields, ok
 }
 
+func OverrideNodeNames(cluster string, nodes string, sep string) string {
+	ns := strings.Split(nodes, sep)
+	// git rid of possible trailing empty string
+	if l := len(ns); l > 0 {
+		if ns[l-1] == common.Empty {
+			ns = ns[:l-1]
+		}
+		common.SortSlice(ns)
+	}
+	for i, n := range ns {
+		ns[i] = overrideNodeName(cluster, n)
+	}
+	return strings.Join(ns, sep)
+}
+
 var nodeWorkloadWriters = common.NewWorkloadWriters()

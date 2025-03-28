@@ -150,19 +150,6 @@ func PrintCSVStringValue(file *os.File, value string, last bool) (err error) {
 	return
 }
 
-func PrintCSVJoinedStringValue(file *os.File, value string, sep string, last bool) error {
-	var sVal string
-	s := strings.Split(value, sep)
-	if l := len(s); l > 0 {
-		if s[l-1] == Empty {
-			s = s[:l-1]
-		}
-		SortSlice(s)
-		sVal = strings.Join(s, sep)
-	}
-	return PrintCSVStringValue(file, sVal, last)
-}
-
 func PrintCSVLabelMap(file *os.File, labelMap map[string]string, last bool) error {
 	return ConditionalPrintCSVLabelMap(file, labelMap, last, nil)
 }

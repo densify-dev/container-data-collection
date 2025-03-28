@@ -159,7 +159,8 @@ func writeAttrs(name string, cluster map[string]*nodeGroup) {
 				return
 			}
 		}
-		if err = common.PrintCSVJoinedStringValue(attributeWrite, ng.nodes, common.Or, false); err != nil {
+		nodes := node.OverrideNodeNames(name, ng.nodes, common.Or)
+		if err = common.PrintCSVStringValue(attributeWrite, nodes, false); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeGroupEntityKind)
 			return
 		}

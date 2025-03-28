@@ -4,6 +4,7 @@ package container
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
 	"os"
 	"strings"
 )
@@ -138,7 +139,8 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 						return
 					}
 				}
-				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%s,%s,%s", cName, common.ReplaceSemiColonsPipes(obj.labelMap[common.Node]), c.powerState.String(), getOwnerKindValue(obj.kind), obj.name); err != nil {
+				nodes := node.OverrideNodeNames(name, common.ReplaceSemiColonsPipes(obj.labelMap[common.Node]), common.Or)
+				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%s,%s,%s", cName, nodes, c.powerState.String(), getOwnerKindValue(obj.kind), obj.name); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
