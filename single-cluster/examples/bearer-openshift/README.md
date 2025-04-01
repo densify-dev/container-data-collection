@@ -12,7 +12,7 @@ You need to setup the following prerequistes before deploying the data forwarder
 
 1. A Linux environment with `bash` and one of the following utilities:
 
-   - For OpenShift clusters, use [oc, OpenShift CLI](https://docs.openshift.com/container-platform/4.15/cli_reference/openshift_cli/getting-started-cli.html).
+   - For OpenShift clusters, use [oc, OpenShift CLI](https://docs.redhat.com/en/documentation/openshift_container_platform/4.18/html/cli_tools/openshift-cli-oc#cli-getting-started).
 
    or:
 
