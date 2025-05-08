@@ -155,3 +155,29 @@ func generateOrOrigin(s string, wg WrapperGenerator) string {
 		return wg(s)
 	}
 }
+
+type LabelReplaceCondition int
+
+const (
+	HasValue LabelReplaceCondition = iota
+	Always
+)
+
+const (
+	hasValueStr = ".+"
+	alwaysStr   = ".*"
+)
+
+func (lrc LabelReplaceCondition) String() (s string) {
+	switch lrc {
+	case HasValue:
+		s = hasValueStr
+	case Always:
+		s = alwaysStr
+	}
+	return
+}
+
+func LabelReplace(query, dstLabel, srcLabel string, lrc LabelReplaceCondition) string {
+	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "(%s)")`, query, dstLabel, srcLabel, lrc.String())
+}

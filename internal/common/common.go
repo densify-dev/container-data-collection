@@ -11,7 +11,8 @@ import (
 //
 //go:generate sh -c "printf %s $(git describe --abbrev=0 --tags) > version.txt"
 //go:embed version.txt
-var Version string
+var version string
+var Version = strings.TrimSpace(version)
 var Params *cconf.Parameters
 var CurrentTime time.Time
 var Interval time.Duration

@@ -45,7 +45,7 @@ func writeConf(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(configWrite)
-	if _, err = fmt.Fprintln(configWrite, "AuditTime,ClusterName,Namespace,EntityName,EntityType,ContainerName,HwTotalMemory,OsName,HwManufacturer"); err != nil {
+	if _, err = fmt.Fprintln(configWrite, "AuditTime,ClusterName,Namespace,EntityName,EntityType,ContainerName,HwTotalMemory,GpuMemoryTotal,OsName,HwManufacturer"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -56,9 +56,12 @@ func writeConf(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVPositiveNumberValue(configWrite, c.memory, false); err != nil {
-					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
-					return
+				values := []int{c.memory, c.gpuMemTotal}
+				for _, value := range values {
+					if err = common.PrintCSVPositiveNumberValue(configWrite, value, false); err != nil {
+						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+						return
+					}
 				}
 				if _, err = fmt.Fprintln(configWrite, ",Linux,CONTAINERS"); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
@@ -109,7 +112,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,ContainerName2,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,QosClass"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,QosClass"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -132,7 +135,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				values := []int{c.cpuLimit, c.cpuRequest, c.memLimit, c.memRequest}
+				values := []int{c.cpuLimit, c.cpuRequest, c.memLimit, c.memRequest, c.gpuLimit, c.gpuRequest}
 				for _, value := range values {
 					if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
@@ -140,7 +143,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					}
 				}
 				nodes := node.OverrideNodeNames(name, common.ReplaceSemiColonsPipes(obj.labelMap[common.Node]), common.Or)
-				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%s,%s,%s", cName, nodes, c.powerState.String(), getOwnerKindValue(obj.kind), obj.name); err != nil {
+				if _, err = fmt.Fprintf(attributeWrite, ",%s,%s,%s,%s", nodes, c.powerState.String(), getOwnerKindValue(obj.kind), obj.name); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}

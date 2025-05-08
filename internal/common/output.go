@@ -5,6 +5,7 @@ import (
 	"github.com/prometheus/common/model"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -138,6 +139,11 @@ func PrintCSVTimeValue(file *os.File, value *time.Time, last bool) error {
 	if !(value == nil || value.IsZero()) {
 		sVal = Format(value)
 	}
+	return PrintCSVStringValue(file, sVal, last)
+}
+
+func PrintCSVBoolValue(file *os.File, value bool, last bool) error {
+	sVal := strconv.FormatBool(value)
 	return PrintCSVStringValue(file, sVal, last)
 }
 

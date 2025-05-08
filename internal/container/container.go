@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
 	"strings"
 	"sync"
@@ -131,10 +132,14 @@ type k8sObject struct {
 
 // container is used to hold information related to containers
 type container struct {
-	memory, cpuLimit, cpuRequest, memLimit, memRequest, restarts int
-	powerState                                                   powerState
-	name                                                         string
-	labelMap                                                     map[string]string
+	memory, gpuMemTotal,
+	cpuLimit, cpuRequest,
+	memLimit, memRequest,
+	gpuLimit, gpuRequest,
+	restarts int
+	powerState powerState
+	name       string
+	labelMap   map[string]string
 }
 
 var nonContinuousKinds = map[string]bool{
@@ -342,14 +347,17 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			ns.objects[ownerKey] = obj
 		}
 		obj.containers[containerName] = &container{
-			memory:     common.UnknownValue,
-			cpuLimit:   common.UnknownValue,
-			cpuRequest: common.UnknownValue,
-			memLimit:   common.UnknownValue,
-			memRequest: common.UnknownValue,
-			powerState: common.UnknownValue,
-			name:       containerName,
-			labelMap:   make(map[string]string),
+			memory:      common.UnknownValue,
+			gpuMemTotal: common.UnknownValue,
+			cpuLimit:    common.UnknownValue,
+			cpuRequest:  common.UnknownValue,
+			memLimit:    common.UnknownValue,
+			memRequest:  common.UnknownValue,
+			gpuLimit:    common.UnknownValue,
+			gpuRequest:  common.UnknownValue,
+			powerState:  common.UnknownValue,
+			name:        containerName,
+			labelMap:    make(map[string]string),
 		}
 	}
 }
@@ -408,11 +416,17 @@ func Metrics() {
 
 	// container metrics
 	common.DebugLogObjectMemStats(common.Container)
-	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests)
+	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests)
 
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
+	if node.HasDcgmExporter(range5Min) {
+		mh.metric = common.GpuMemoryTotal
+		query = "sum(DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}) by (namespace, pod, container)"
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+	}
 
 	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container))",
 		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
@@ -659,6 +673,28 @@ func Metrics() {
 	wq.baseQuery = fmt.Sprintf(`sum(increase(container_cpu_cfs_throttled_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,%s,namespace,%s)`,
 		common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
+
+	if node.HasDcgmExporter(range5Min) {
+		wq.aggregatorAsSuffix = true
+		wq.aggregators = map[string]string{common.Avg: common.Empty}
+		wq.metricName = common.CamelCase(common.Gpu, common.Utilization)
+		wq.baseQuery = "avg(DCGM_FI_DEV_GPU_UTIL{}) by (namespace, pod, container)"
+		getWorkload(wq)
+		wq.metricName = common.CamelCase(common.Gpu, common.Utilization, common.Gpus)
+		wq.baseQuery += fmt.Sprintf(` * on (namespace,pod,container) kube_pod_container_resource_requests{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
+		getWorkload(wq)
+		wq.metricName = common.CamelCase(common.Gpu, common.Mem, common.Utilization)
+		wq.baseQuery = "avg(100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})) by (namespace, pod, container)"
+		getWorkload(wq)
+		wq.metricName = common.CamelCase(common.Gpu, common.Mem, common.Used)
+		wq.baseQuery = "sum(DCGM_FI_DEV_FB_USED{}) by (namespace, pod, container)"
+		getWorkload(wq)
+		wq.metricName = common.CamelCase(common.Gpu, common.Power, common.Usage)
+		wq.baseQuery = "sum(DCGM_FI_DEV_POWER_USAGE{}) by (namespace, pod, container)"
+		getWorkload(wq)
+		// restore the default
+		wq.aggregatorAsSuffix = false
+	}
 
 	wq.metricName = restarts
 	wq.wqwIdx = containerIdx

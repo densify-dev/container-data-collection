@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/sigv4"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -361,13 +362,13 @@ func ToPrometheusLabelNameList(list string) string {
 func CalculateScrapeIntervals() (err error) {
 	et := TimeRangeEndTimeOnly()
 	var query string
-	for _, exporter := range exporters {
+	for _, exp := range exporters {
 		var labelSelector string
-		if len(exporter.repLabels) > 0 {
-			labelSelector = Join(nonEmptyLabel+Comma, exporter.repLabels...) + nonEmptyLabel
+		if len(exp.repLabels) > 0 {
+			labelSelector = Join(nonEmptyLabel+Comma, exp.repLabels...) + nonEmptyLabel
 		}
-		query = fmt.Sprintf(`max(count_over_time(%s{%s}[%v])) by (job)`, exporter.repMetric, labelSelector, Interval)
-		_, err = CollectAndProcessMetric(query, et, exporter.scrapeIntervalFromRepQuery)
+		query = fmt.Sprintf(`max(count_over_time(%s{%s}[%v])) by (job)`, exp.repMetric, labelSelector, Interval)
+		_, err = CollectAndProcessMetric(query, et, exp.scrapeIntervalFromRepQuery)
 	}
 	query = fmt.Sprintf(`max(sum_over_time(up{}[%v])) by (job)`, Interval)
 	if _, e := CollectAndProcessMetric(query, et, scrapeIntervalFromUp); err == nil && e != nil {
@@ -382,10 +383,32 @@ func CalculateScrapeIntervals() (err error) {
 }
 
 const (
+	prometheusMetricName = "__name__"
+	metricName           = "metric_name"
+	allMetricsQueryFmt   = `{%s=~"%s_%s"}`
+	allMetricsFmt        = `sum(present_over_time(%s[%v:])) by (%s) > 0`
+)
+
+func LogAllMetrics() (err error) {
+	et := TimeRangeEndTimeOnly()
+	var query string
+	for _, exp := range exporters {
+		if exp.logAllMetrics || Params.Debug {
+			query = fmt.Sprintf(allMetricsQueryFmt, prometheusMetricName, exp.metricsPrefix, Always.String())
+			query = LabelReplace(query, metricName, prometheusMetricName, HasValue)
+			query = fmt.Sprintf(allMetricsFmt, query, Interval, metricName)
+			_, err = CollectAndProcessMetric(query, et, exp.logAllClusterMetrics)
+		}
+	}
+	return
+}
+
+const (
 	cadvisor     = "cadvisor"
 	nodeExporter = "node-exporter"
 	ksm          = "kube-state-metrics"
 	ossm         = "openshift-state-metrics"
+	dcgm         = "dcgm-exporter"
 )
 
 type exporter struct {
@@ -393,6 +416,7 @@ type exporter struct {
 	metricsPrefix string
 	repMetric     string
 	repLabels     []string
+	logAllMetrics bool
 }
 
 type clusterExporter struct {
@@ -400,6 +424,21 @@ type clusterExporter struct {
 	promJob              string
 	ActualScrapeInterval time.Duration // exported for fmt pretty-printing
 	UpScrapeInterval     time.Duration // exported for fmt pretty-printing
+}
+
+func (e *exporter) logAllClusterMetrics(cluster string, result model.Matrix) {
+	s := make([]string, 0, result.Len())
+	for _, ss := range result {
+		if mn, f := GetLabelValue(ss, metricName); f {
+			s = append(s, mn)
+		}
+	}
+	sort.Strings(s)
+	var level LogLevel
+	if e.logAllMetrics {
+		level = Info
+	}
+	LogCluster(1, level, ClusterFormat+" exporter=%s detected metrics=%v", cluster, true, cluster, e.name, s)
 }
 
 func (e *exporter) scrapeIntervalFromRepQuery(cluster string, result model.Matrix) {
@@ -441,16 +480,17 @@ func setScrapeInterval(target *time.Duration, ss *model.SampleStream) {
 var exporters = makeExporters()
 
 func makeExporters() []*exporter {
-	exps := make([]*exporter, 0, 4)
-	addExporter(&exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container})
-	addExporter(&exps, nodeExporter, "node_cpu_seconds_total", nil)
-	addExporter(&exps, ksm, "kube_pod_info", nil)
-	addExporter(&exps, ossm, "openshift_clusterresourcequota_usage", nil)
+	exps := make([]*exporter, 0, 5)
+	addExporter(&exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false)
+	addExporter(&exps, nodeExporter, "node_cpu_seconds_total", nil, false)
+	addExporter(&exps, ksm, "kube_pod_info", nil, false)
+	addExporter(&exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
+	addExporter(&exps, dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
 	return exps
 }
 
-func addExporter(exps *[]*exporter, name, repMetric string, repLabels []string) {
-	*exps = append(*exps, &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels})
+func addExporter(exps *[]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool) {
+	*exps = append(*exps, &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics})
 }
 
 var clusterExporters = make(map[string]map[string]*clusterExporter)

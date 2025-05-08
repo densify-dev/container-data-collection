@@ -82,6 +82,16 @@ var (
 	MemoryUtilization        = NewWorkloadMetricHolder(Memory, Utilization)
 	MemoryActualUtilization  = NewWorkloadMetricHolder(Memory, Actual, Utilization)
 	MemoryWsUtilization      = NewWorkloadMetricHolder(Memory, WorkingSet, Utilization)
+	GpuUtilizationAvg        = NewWorkloadMetricHolder(Gpu, Utilization, Avg)
+	GpuUtilizationMax        = NewWorkloadMetricHolder(Gpu, Utilization, Max)
+	GpuUtilizationGpusAvg    = NewWorkloadMetricHolder(Gpu, Utilization, Gpus, Avg)
+	GpuUtilizationGpusMax    = NewWorkloadMetricHolder(Gpu, Utilization, Gpus, Max)
+	GpuMemUtilizationAvg     = NewWorkloadMetricHolder(Gpu, Mem, Utilization, Avg)
+	GpuMemUtilizationMax     = NewWorkloadMetricHolder(Gpu, Mem, Utilization, Max)
+	GpuMemUsedAvg            = NewWorkloadMetricHolder(Gpu, Mem, Used, Avg)
+	GpuMemUsedMax            = NewWorkloadMetricHolder(Gpu, Mem, Used, Max)
+	GpuPowerUsageAvg         = NewWorkloadMetricHolder(Gpu, Power, Usage, Avg)
+	GpuPowerUsageMax         = NewWorkloadMetricHolder(Gpu, Power, Usage, Max)
 	DiskReadBytes            = NewWorkloadMetricHolder(Disk, Read, Bytes)
 	DiskWriteBytes           = NewWorkloadMetricHolder(Disk, Write, Bytes)
 	DiskTotalBytes           = NewWorkloadMetricHolder(Disk, Total, Bytes)
@@ -101,6 +111,8 @@ var (
 	MemoryRequests           = NewWorkloadMetricHolder(Memory, Requests)
 	MemLimits                = NewWorkloadMetricHolder(Mem, Limits)
 	MemRequests              = NewWorkloadMetricHolder(Mem, Requests)
+	GpuLimits                = NewWorkloadMetricHolder(Gpu, Limits)
+	GpuRequests              = NewWorkloadMetricHolder(Gpu, Requests)
 	PodsLimits               = NewWorkloadMetricHolder(Pods, Limits).OverrideFileName(Pods)
 	CpuReservationPercent    = NewWorkloadMetricHolder(Cpu, Reservation, Percent)
 	MemoryReservationPercent = NewWorkloadMetricHolder(Memory, Reservation, Percent)
@@ -110,7 +122,7 @@ var (
 )
 
 const (
-	FilterTerminatedContainersClause = " unless on (namespace,pod,container) max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container) == 1"
+	FilterTerminatedContainersClause = ` unless on (namespace,pod) max(kube_pod_status_phase{phase!="Running"}) by (namespace,pod) == 1 or on (namespace,pod,container) max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container) == 1`
 )
 
 func FilterTerminatedContainers(prefix, suffix string) string {

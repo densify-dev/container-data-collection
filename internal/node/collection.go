@@ -8,12 +8,12 @@ import (
 
 var indicators = make(map[string]int)
 
-func getNode(cluster string, ss *model.SampleStream, nodeLabel model.LabelName) (ng *node, f bool) {
+func getNode(cluster string, ss *model.SampleStream, nodeLabel model.LabelName) (n *node, f bool) {
 	var nodeLabelValue model.LabelValue
 	nodeLabelValue, f = ss.Metric[nodeLabel]
 	if f {
 		nodeValue := string(nodeLabelValue)
-		ng, f = nodes[cluster][nodeValue]
+		n, f = nodes[cluster][nodeValue]
 	}
 	return
 }
@@ -25,6 +25,12 @@ const (
 
 func setValue(what *int, value float64) {
 	*what = int(value)
+}
+
+func setValueIfUnknown(what *int, value float64) {
+	if *what == common.UnknownValue {
+		setValue(what, value)
+	}
 }
 
 type metricHolder struct {
@@ -55,6 +61,8 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 				setValue(&n.cpuCapacity, value)
 			case common.Memory:
 				setValue(&n.memCapacity, value)
+			case model.LabelValue(common.NvidiaGpuResource):
+				setValue(&n.gpuCapacity, value)
 			case model.LabelValue(common.Pods):
 				setValue(&n.podsCapacity, value)
 			case ephemeralStorage:
@@ -68,6 +76,11 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 				setValue(&n.cpuAllocatable, value)
 			case common.Memory:
 				setValue(&n.memAllocatable, value)
+			case model.LabelValue(common.NvidiaGpuResource):
+				setValue(&n.gpuAllocatable, value)
+				// if gpuTotal, gpuReplicas were not set from a label, take the gpuAllocatable value
+				setValueIfUnknown(&n.gpuTotal, value)
+				setValueIfUnknown(&n.gpuReplicas, value)
 			case model.LabelValue(common.Pods):
 				setValue(&n.podsAllocatable, value)
 			case ephemeralStorage:
@@ -99,6 +112,9 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			case common.Memory:
 				setValue(&n.memLimit, common.MiB(value))
 				common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryLimits, ss, common.MiB[float64])
+			case model.LabelValue(common.NvidiaGpuResource):
+				setValue(&n.gpuLimit, value)
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.GpuLimits, ss, nil)
 			}
 		case common.Requests:
 			switch res {
@@ -108,6 +124,9 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			case common.Memory:
 				setValue(&n.memRequest, common.MiB(value))
 				common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, common.MiB[float64])
+			case model.LabelValue(common.NvidiaGpuResource):
+				setValue(&n.gpuRequest, value)
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.GpuRequests, ss, nil)
 			}
 		case common.CpuLimit:
 			setValue(&n.cpuLimit, value)
@@ -121,6 +140,10 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 		case common.MemRequest:
 			setValue(&n.memRequest, value)
 			common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, nil)
+		case ModelName:
+			if n.isGpuModelMissing() {
+				n.gpuModel = string(ss.Metric[model.LabelName(ModelName)])
+			}
 		}
 	}
 }
@@ -132,8 +155,30 @@ func getNodeMetricString(cluster string, result model.Matrix) {
 		if !ok {
 			continue
 		}
+		dstMaps := []map[string]string{n.labelMap, n.gpuLabelMap}
+		l := len(dstMaps)
+		srcMaps := make([]map[string]string, 0, l)
+		for i := 0; i < l; i++ {
+			srcMaps = append(srcMaps, make(map[string]string, len(ss.Metric)))
+		}
+		// split the labels into two maps, a general one for the node and a specific one for the GPU
 		for key, value := range ss.Metric {
-			common.AddToLabelMap(string(key), string(value), n.labelMap)
+			k := string(key)
+			v := string(value)
+			var i int
+			if isGpuLabel(k) {
+				i = 1
+			}
+			srcMaps[i][k] = v
+		}
+		applyGpuLabels(cluster, n, srcMaps[1])
+		if n.isGpuModelMissing() {
+			isGpuModelMissing = true
+		}
+		for i := 0; i < l; i++ {
+			for key, value := range srcMaps[i] {
+				common.AddToLabelMap(key, value, dstMaps[i])
+			}
 		}
 	}
 }

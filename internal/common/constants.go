@@ -108,6 +108,8 @@ const (
 	Value       = "value"
 	Effect      = "effect"
 	WorkingSet  = "ws"
+	Power       = "power"
+	Usage       = "usage"
 )
 
 // owner kind labels
@@ -164,6 +166,21 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	Asterisk              = "*"
+)
+
+// GPU consts and vars
+const (
+	Gpu    = "gpu"
+	Nvidia = "nvidia"
+	Amd    = "amd"
+	Intel  = "intel"
+	Com    = "com"
+)
+
+var (
+	Gpus              = Plural(Gpu)
+	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
+	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
 )
 
 func Join(sep string, elements ...string) string {

@@ -1,6 +1,9 @@
 package common
 
-import "github.com/prometheus/common/model"
+import (
+	"github.com/prometheus/common/model"
+	"strconv"
+)
 
 const (
 	UnknownValue      = -1
@@ -60,4 +63,41 @@ func GetLabelsValues(ss *model.SampleStream, names []string) (m map[string]strin
 	}
 	b = len(m) == l
 	return
+}
+
+func SetMetricLabelValue[V any](cluster string, target *V, ss *model.SampleStream, key string) {
+	if value, f := GetLabelValue(ss, key); f {
+		setValue(cluster, target, key, value)
+	}
+}
+
+func SetLabelValue[V any](cluster string, target *V, labels map[string]string, key string) {
+	if value, f := labels[key]; f {
+		setValue(cluster, target, key, value)
+	}
+}
+
+func setValue[V any](cluster string, target *V, key, value string) {
+	switch t := any(target).(type) {
+	case *string:
+		*t = value
+	case *int:
+		if v, err := strconv.Atoi(value); err == nil {
+			*t = v
+		}
+	case *int64:
+		if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+			*t = v
+		}
+	case *uint64:
+		if v, err := strconv.ParseUint(value, 10, 64); err == nil {
+			*t = v
+		}
+	case *bool:
+		if v, err := strconv.ParseBool(value); err == nil {
+			*t = v
+		}
+	default:
+		LogCluster(1, Error, ClusterFormat+" unknown type %T for key %s and value %s in labels", cluster, true, cluster, t, key, value)
+	}
 }

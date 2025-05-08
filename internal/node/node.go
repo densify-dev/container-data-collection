@@ -40,14 +40,25 @@ func (ts taints) String() string {
 
 // A node structure. Used for storing attributes and config details.
 type node struct {
-	labelMap                                                                                                        map[string]string
-	name                                                                                                            string
-	providerId                                                                                                      string
-	k8sVersion                                                                                                      string
-	netSpeedBytes, memTotal, cpuCapacity, memCapacity, ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
-	cpuAllocatable, memAllocatable, ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable           int
-	cpuLimit, cpuRequest, memLimit, memRequest                                                                      int
-	taints                                                                                                          taints
+	labelMap, gpuLabelMap                          map[string]string
+	name                                           string
+	providerId                                     string
+	k8sVersion                                     string
+	gpuVendor, gpuModel                            string
+	netSpeedBytes, memTotal, gpuTotal, gpuMemTotal int
+	cpuCapacity, memCapacity, gpuCapacity,
+	ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
+	cpuAllocatable, memAllocatable, gpuAllocatable,
+	ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
+	cpuLimit, cpuRequest, memLimit, memRequest, gpuLimit, gpuRequest int
+	gpuReplicas                                                      int
+	gpuSharingStrategy, gpuMigStrategy                               string
+	gpuMigCapable, gpuMpsCapable, gpuVgpuPresent                     bool
+	taints                                                           taints
+}
+
+func (n *node) isGpuModelMissing() bool {
+	return n.gpuVendor != common.Empty && n.gpuModel == common.Empty
 }
 
 // Map that labels and values will be stored in
@@ -83,19 +94,25 @@ func Metrics() {
 	query = `kube_node_spec_taint{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeTaints)
 
-	DetermineNodeExporter(range5Min)
-
-	mh := &metricHolder{name: common.NetSpeedBytes}
-	for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
-		mh.labelName = qw.MetricField[0]
-		query = qw.Query.Wrap(`max(node_network_speed_bytes{device!~"veth.*|docker.*|cilium.*|lxc.*"}) by (node, instance)`)
-		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
-		mh.name = common.MemTotal
-		query = qw.Query.Wrap(`max(node_memory_MemTotal_bytes{}) by (node, instance)`)
-		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+	mh := &metricHolder{}
+	if HasNodeExporter(range5Min) {
+		for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
+			mh.labelName = qw.MetricField[0]
+			mh.name = common.NetSpeedBytes
+			query = qw.Query.Wrap(`max(node_network_speed_bytes{device!~"veth.*|docker.*|cilium.*|lxc.*"}) by (node, instance)`)
+			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+			mh.name = common.MemTotal
+			query = qw.Query.Wrap(`max(node_memory_MemTotal_bytes{}) by (node, instance)`)
+			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+		}
 	}
 
 	mh.labelName = common.Node
+	if HasDcgmExporter(range5Min) && isGpuModelMissing {
+		mh.name = ModelName
+		query = fmt.Sprintf("max(DCGM_FI_DEV_GPU_UTIL{}) by (%s, %s)", common.Node, ModelName)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+	}
 	// Queries the capacity fields of all nodes
 	mh.name = common.Capacity
 	query = `kube_node_status_capacity{}`
@@ -130,7 +147,7 @@ func Metrics() {
 		query = `kube_node_status_allocatable_pods{}`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
-	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests)
+	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests)
 
 	mh.name = common.Limits
 	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{}`, `) by (node, resource)`)
@@ -191,6 +208,20 @@ func Metrics() {
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
+	if HasDcgmExporter(range5Min) {
+		query = qw.AvgQuery.Wrap("DCGM_FI_DEV_GPU_UTIL{}")
+		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		query += fmt.Sprintf(` * on (node) kube_node_status_allocatable{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
+		common.GpuUtilizationGpusAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		query = qw.AvgQuery.Wrap("100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})")
+		common.GpuMemUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap("DCGM_FI_DEV_FB_USED{}")
+		common.GpuMemUsedAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		query = qw.SumQuery.Wrap("DCGM_FI_DEV_POWER_USAGE{}")
+		common.GpuPowerUsageAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+	} else {
+		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeEntityKind)
+	}
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
 	if !HasNodeExporter(range5Min) {
 		err = fmt.Errorf("prometheus node exporter metrics not present for any cluster")
@@ -325,14 +356,20 @@ func createNode(cluster string, result model.Matrix) {
 				providerId:                  provId,
 				k8sVersion:                  k8sVer,
 				labelMap:                    make(map[string]string),
+				gpuLabelMap:                 make(map[string]string),
 				netSpeedBytes:               common.UnknownValue,
+				memTotal:                    common.UnknownValue,
+				gpuTotal:                    common.UnknownValue,
+				gpuMemTotal:                 common.UnknownValue,
 				cpuCapacity:                 common.UnknownValue,
 				memCapacity:                 common.UnknownValue,
+				gpuCapacity:                 common.UnknownValue,
 				ephemeralStorageCapacity:    common.UnknownValue,
 				podsCapacity:                common.UnknownValue,
 				hugepages2MiCapacity:        common.UnknownValue,
 				cpuAllocatable:              common.UnknownValue,
 				memAllocatable:              common.UnknownValue,
+				gpuAllocatable:              common.UnknownValue,
 				ephemeralStorageAllocatable: common.UnknownValue,
 				podsAllocatable:             common.UnknownValue,
 				hugepages2MiAllocatable:     common.UnknownValue,
@@ -340,6 +377,9 @@ func createNode(cluster string, result model.Matrix) {
 				cpuRequest:                  common.UnknownValue,
 				memLimit:                    common.UnknownValue,
 				memRequest:                  common.UnknownValue,
+				gpuLimit:                    common.UnknownValue,
+				gpuRequest:                  common.UnknownValue,
+				gpuReplicas:                 common.UnknownValue,
 			}
 			nodes[cluster][nodeName] = n
 		}
@@ -355,13 +395,15 @@ const (
 	HasNodeLabel           = "node_label_node_name"     // "node" label is present and has the node name
 	HasInstanceLabelPodIp  = "instance_label_pod_ip"    // "node" label is absent, "instance" label has a format of IP address:port
 	HasInstanceLabelOther  = "instance_label_node_name" // "node" label is absent, "instance" label has a different format and assumed to be node name
+	dcgmExporterPivotQuery = "max(DCGM_FI_DEV_GPU_UTIL{}) by (node)"
 )
 
 var once sync.Once
 
-func DetermineNodeExporter(range5Min *v1.Range) {
+func DetermineExporters(range5Min *v1.Range) {
 	once.Do(func() {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
+		_, _ = common.CollectAndProcessMetric(dcgmExporterPivotQuery, range5Min, determineDcgmExporter)
 	})
 }
 
@@ -390,17 +432,31 @@ func determineNodeExporter(cluster string, result model.Matrix) {
 	}
 }
 
+var dcgmExporterIndicators = make(map[string]bool)
+
+func determineDcgmExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		dcgmExporterIndicators[cluster] = true
+	}
+}
+
 // HasNodeExporter returns true if node exporter metrics are present for any cluster
 func HasNodeExporter(range5Min *v1.Range) bool {
-	DetermineNodeExporter(range5Min)
+	DetermineExporters(range5Min)
 	return len(nodeExporterIndicators) > 0
+}
+
+// HasDcgmExporter returns true if DCGM exporter metrics are present for any cluster
+func HasDcgmExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(dcgmExporterIndicators) > 0
 }
 
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
 
 type QueryWrapper struct {
-	Query, SumQuery, CountQuery *common.WorkloadQueryWrapper
-	MetricField                 []model.LabelName
+	Query, SumQuery, CountQuery, AvgQuery *common.WorkloadQueryWrapper
+	MetricField                           []model.LabelName
 }
 
 const (
@@ -434,6 +490,10 @@ func simpleQueryWrapper(labelName string) *QueryWrapper {
 		},
 		CountQuery: &common.WorkloadQueryWrapper{
 			Prefix: "count(",
+			Suffix: sfx,
+		},
+		AvgQuery: &common.WorkloadQueryWrapper{
+			Prefix: "avg(",
 			Suffix: sfx,
 		},
 		MetricField: []model.LabelName{model.LabelName(labelName)},
@@ -494,7 +554,7 @@ func getMemoryMetrics(qw *QueryWrapper) {
 	var wmhms []map[string]*common.WorkloadMetricHolder
 	wmhms = append(wmhms, makeWmhMap(memBaseQuery, common.MemoryBytes, common.MemoryUtilization, qw, true))
 	wmhms = append(wmhms, makeWmhMap(GetMemActualQuery(), common.MemoryActualWorkload, common.MemoryActualUtilization, qw, true))
-	memWsQuery := labelReplace(labelReplace(labelReplace(memBaseWsQuery, common.Instance, common.Node, hasValue), common.Instance, k8sIoHostname, hasValue), common.Node, common.Instance, always)
+	memWsQuery := common.LabelReplace(common.LabelReplace(common.LabelReplace(memBaseWsQuery, common.Instance, common.Node, common.HasValue), common.Instance, k8sIoHostname, common.HasValue), common.Node, common.Instance, common.Always)
 	wmhms = append(wmhms, makeWmhMap(memWsQuery, common.MemoryWs, common.MemoryWsUtilization, qw, false))
 	for _, wmhm := range wmhms {
 		for baseQuery, wmh := range wmhm {
@@ -511,34 +571,8 @@ func makeWmhMap(baseQuery string, absolute, utilization *common.WorkloadMetricHo
 	if totalBasedUtilization || mf != common.Instance {
 		divisor = utilizationBaseQuery
 	} else {
-		divisor = labelReplace(utilizationBaseQuery, common.Instance, common.Node, always)
+		divisor = common.LabelReplace(utilizationBaseQuery, common.Instance, common.Node, common.Always)
 	}
 	utilizationQuery := fmt.Sprintf(utilizationFmt, baseQuery, mf, divisor)
 	return map[string]*common.WorkloadMetricHolder{baseQuery: absolute, utilizationQuery: utilization}
-}
-
-type labelReplaceCondition int
-
-const (
-	hasValue labelReplaceCondition = iota
-	always
-)
-
-const (
-	hasValueStr = "(.+)"
-	alwaysStr   = "(.*)"
-)
-
-func (lrc labelReplaceCondition) String() (s string) {
-	switch lrc {
-	case hasValue:
-		s = hasValueStr
-	case always:
-		s = alwaysStr
-	}
-	return
-}
-
-func labelReplace(query, dstLabel, srcLabel string, lrc labelReplaceCondition) string {
-	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "%s")`, query, dstLabel, srcLabel, lrc.String())
 }

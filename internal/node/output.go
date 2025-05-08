@@ -72,7 +72,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableEphemeralStorage,AllocatableHugePages,MemoryTotalBytes,ProviderId,K8sVersion,NodeLabels,NodeTaints"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityGpu,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableGpu,AllocatableEphemeralStorage,AllocatableHugePages,MemoryTotalBytes,GpuTotal,GpuMemoryTotal,GpuReplicas,ProviderId,K8sVersion,NodeLabels,GpuLabels,NodeTaints,GpuVendor,GpuModel,GpuSharingStrategy,GpuMpsCapable,GpuVgpuPresent,GpuMigCapable,GpuMigStrategy"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 		return
 	}
@@ -83,10 +83,10 @@ func writeAttrs(name string, cluster map[string]*node) {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
-		values := []int{n.netSpeedBytes, n.cpuLimit, n.cpuRequest, n.memLimit, n.memRequest,
-			n.podsCapacity, n.cpuCapacity, n.memCapacity, n.ephemeralStorageCapacity, n.hugepages2MiCapacity,
-			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
-			n.memTotal}
+		values := []int{n.netSpeedBytes, n.cpuLimit, n.cpuRequest, n.memLimit, n.memRequest, n.gpuLimit, n.gpuRequest,
+			n.podsCapacity, n.cpuCapacity, n.memCapacity, n.gpuCapacity, n.ephemeralStorageCapacity, n.hugepages2MiCapacity,
+			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.gpuAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
+			n.memTotal, n.gpuTotal, n.gpuMemTotal, n.gpuReplicas}
 		for _, value := range values {
 			if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 				common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
@@ -109,7 +109,43 @@ func writeAttrs(name string, cluster map[string]*node) {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}
-		if err = common.PrintCSVStringValue(attributeWrite, n.taints.String(), true); err != nil {
+		if err = common.PrintCSVStringValue(attributeWrite, common.Empty, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVLabelMap(attributeWrite, n.gpuLabelMap, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.taints.String(), false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.gpuVendor, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.gpuModel, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.gpuSharingStrategy, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVBoolValue(attributeWrite, n.gpuMpsCapable, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVBoolValue(attributeWrite, n.gpuVgpuPresent, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVBoolValue(attributeWrite, n.gpuMigCapable, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
+			return
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, n.gpuMigStrategy, true); err != nil {
 			common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 			return
 		}

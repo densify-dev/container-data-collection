@@ -41,6 +41,9 @@ func main() {
 	if err = common.CalculateScrapeIntervals(); err != nil {
 		common.FatalError(err, "Failed to calculate scrape intervals:")
 	}
+	if err = common.LogAllMetrics(); err != nil {
+		common.FatalError(err, "Failed to log all metrics:")
+	}
 	// first get the kubernetes version information, to be used by cluster and nodes
 	kubernetes.Metrics()
 	if includes(common.NodeEntityKind) {
@@ -74,6 +77,7 @@ func main() {
 
 func includes(entityKind string) bool {
 	return entityKind == common.ClusterEntityKind ||
+		entityKind == common.NodeEntityKind ||
 		len(common.Params.Collection.Include) == 0 ||
 		common.Params.Collection.Include[entityKind]
 }

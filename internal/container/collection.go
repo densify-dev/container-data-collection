@@ -178,6 +178,9 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			case common.Cpu:
 				c.cpuLimit = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
+			case common.NvidiaGpuResource:
+				c.gpuLimit = int(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
 			}
 		case common.Requests:
 			switch resource {
@@ -187,11 +190,16 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			case common.Cpu:
 				c.cpuRequest = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
+			case common.NvidiaGpuResource:
+				c.gpuRequest = int(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)
-			// skip extra call to getContainerMetricString
+			// skip an extra call to getContainerMetricString
 			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
+		case common.GpuMemoryTotal:
+			c.gpuMemTotal = int(value)
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
@@ -517,8 +525,13 @@ func getNamespaceMetricString(cluster string, result model.Matrix) {
 	}
 }
 
-func newAggregatorWorkloadMetricHolder(aggregator string, workloadSuffix bool, metricName string) *common.WorkloadMetricHolder {
-	ne := []string{aggregator, metricName}
+func newAggregatorWorkloadMetricHolder(aggregator string, aggregatorAsSuffix, workloadSuffix bool, metricName string) *common.WorkloadMetricHolder {
+	var ne []string
+	if aggregatorAsSuffix {
+		ne = []string{metricName, aggregator}
+	} else {
+		ne = []string{aggregator, metricName}
+	}
 	wmh := common.NewWorkloadMetricHolder(ne...)
 	if workloadSuffix {
 		ne = append(ne, common.Workload)
@@ -528,13 +541,14 @@ func newAggregatorWorkloadMetricHolder(aggregator string, workloadSuffix bool, m
 }
 
 type workloadQuery struct {
-	metricName      string
-	baseQuery       string
-	wqwIdx          int
-	hasSuffix       bool
-	aggregators     map[string]string
-	aggregatorNames map[string]string
-	groupClauses    map[string]*queryProcessorBuilder
+	metricName         string
+	baseQuery          string
+	wqwIdx             int
+	hasSuffix          bool
+	aggregatorAsSuffix bool
+	aggregators        map[string]string
+	aggregatorNames    map[string]string
+	groupClauses       map[string]*queryProcessorBuilder
 }
 
 func (th *typeHolder) containerFields(cluster string, fields []string) (cf []string, ok bool) {
@@ -577,7 +591,7 @@ func getWorkload(wq *workloadQuery) {
 		if agg, _ = wq.aggregatorNames[aggregator]; agg == common.Empty {
 			agg = aggregator
 		}
-		wmh := newAggregatorWorkloadMetricHolder(agg, wq.hasSuffix, wq.metricName)
+		wmh := newAggregatorWorkloadMetricHolder(agg, wq.aggregatorAsSuffix, wq.hasSuffix, wq.metricName)
 		for _, lh := range labelHolders {
 			queries := make(map[string]*common.QueryProcessor, len(wq.groupClauses))
 			if lh.detected {
