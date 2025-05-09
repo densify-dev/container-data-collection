@@ -43,10 +43,12 @@ var (
 			true:  labelGkeGpuComponents,
 		},
 	}
-	nvidiaLabelPrefix = getLabelName(common.Nvidia, false)
-	gkeLabelPrefix    = getLabelName(gke, false)
-	isGpuModelMissing bool
-	ModelName         = common.DromedaryCase(Model, common.Name)
+	nvidiaLabelPrefix             = getLabelName(common.Nvidia, false)
+	gkeLabelPrefix                = getLabelName(gke, false)
+	ModelName                     = common.DromedaryCase(Model, common.Name)
+	memTotal                      = common.DromedaryCase(common.Mem, common.Total)
+	candidateMissingGpuAttributes = []string{Model, memTotal}
+	missingGpuAttributes          = make(map[string]bool)
 )
 
 func isGpuLabel(key string) bool {

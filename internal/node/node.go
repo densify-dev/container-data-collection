@@ -57,8 +57,16 @@ type node struct {
 	taints                                                           taints
 }
 
-func (n *node) isGpuModelMissing() bool {
-	return n.gpuVendor != common.Empty && n.gpuModel == common.Empty
+func (n *node) isGpuAttributeMissing(attrName string) (b bool) {
+	if n.gpuVendor != common.Empty {
+		switch attrName {
+		case Model:
+			b = n.gpuModel == common.Empty
+		case memTotal:
+			b = n.gpuMemTotal == common.UnknownValue
+		}
+	}
+	return
 }
 
 // Map that labels and values will be stored in
@@ -108,10 +116,17 @@ func Metrics() {
 	}
 
 	mh.labelName = common.Node
-	if HasDcgmExporter(range5Min) && isGpuModelMissing {
-		mh.name = ModelName
-		query = fmt.Sprintf("max(DCGM_FI_DEV_GPU_UTIL{}) by (%s, %s)", common.Node, ModelName)
-		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+	if HasDcgmExporter(range5Min) {
+		if missingGpuAttributes[Model] {
+			mh.name = ModelName
+			query = fmt.Sprintf("max(DCGM_FI_DEV_GPU_UTIL{}) by (%s, %s)", common.Node, ModelName)
+			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+		}
+		if missingGpuAttributes[memTotal] {
+			mh.name = common.GpuMemoryTotal
+			query = fmt.Sprintf("sum(DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}) by (%s)", common.Node)
+			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+		}
 	}
 	// Queries the capacity fields of all nodes
 	mh.name = common.Capacity
