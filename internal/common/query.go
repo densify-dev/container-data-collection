@@ -181,3 +181,7 @@ func (lrc LabelReplaceCondition) String() (s string) {
 func LabelReplace(query, dstLabel, srcLabel string, lrc LabelReplaceCondition) string {
 	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "(%s)")`, query, dstLabel, srcLabel, lrc.String())
 }
+
+func DcgmExporterLabelReplace(query string) string {
+	return LabelReplace(query, Node, Hostname, Always)
+}

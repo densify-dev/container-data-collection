@@ -5,6 +5,7 @@ import (
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/prometheus/common/model"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -199,7 +200,29 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			// skip an extra call to getContainerMetricString
 			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 		case common.GpuMemoryTotal:
-			c.gpuMemTotal = int(value)
+			// add the value to the total
+			if c.gpuMemTotal == common.UnknownValue {
+				c.gpuMemTotal = 0
+			}
+			c.gpuMemTotal += int(value)
+			// also get the GPU model name
+			if gpuModelName, f := common.GetLabelValue(ss, common.ModelName); f {
+				ms := strings.Split(c.gpuModel, common.Or)
+				f = false
+				for _, m := range ms {
+					if f = strings.EqualFold(m, gpuModelName); f {
+						break
+					}
+				}
+				if !f {
+					if len(ms) == 1 && ms[0] == common.Empty {
+						ms = nil
+					}
+					ms = append(ms, gpuModelName)
+					sort.Strings(ms)
+					c.gpuModel = strings.Join(ms, common.Or)
+				}
+			}
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])

@@ -60,7 +60,7 @@ type node struct {
 func (n *node) isGpuAttributeMissing(attrName string) (b bool) {
 	if n.gpuVendor != common.Empty {
 		switch attrName {
-		case Model:
+		case common.Model:
 			b = n.gpuModel == common.Empty
 		case memTotal:
 			b = n.gpuMemTotal == common.UnknownValue
@@ -117,14 +117,14 @@ func Metrics() {
 
 	mh.labelName = common.Node
 	if HasDcgmExporter(range5Min) {
-		if missingGpuAttributes[Model] {
-			mh.name = ModelName
-			query = fmt.Sprintf("max(DCGM_FI_DEV_GPU_UTIL{}) by (%s, %s)", common.Node, ModelName)
+		if missingGpuAttributes[common.Model] {
+			mh.name = common.ModelName
+			query = fmt.Sprintf("max(%s) by (%s, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node, common.ModelName)
 			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 		}
 		if missingGpuAttributes[memTotal] {
 			mh.name = common.GpuMemoryTotal
-			query = fmt.Sprintf("sum(DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}) by (%s)", common.Node)
+			query = fmt.Sprintf("sum(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.Node)
 			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 		}
 	}
@@ -224,15 +224,15 @@ func Metrics() {
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 	if HasDcgmExporter(range5Min) {
-		query = qw.AvgQuery.Wrap("DCGM_FI_DEV_GPU_UTIL{}")
+		query = qw.AvgQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		query += fmt.Sprintf(` * on (node) kube_node_status_allocatable{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
 		common.GpuUtilizationGpusAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
-		query = qw.AvgQuery.Wrap("100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})")
+		query = qw.AvgQuery.Wrap("100 * " + common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"))
 		common.GpuMemUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
-		query = qw.SumQuery.Wrap("DCGM_FI_DEV_FB_USED{}")
+		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
 		common.GpuMemUsedAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
-		query = qw.SumQuery.Wrap("DCGM_FI_DEV_POWER_USAGE{}")
+		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
 		common.GpuPowerUsageAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 	} else {
 		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeEntityKind)
@@ -410,7 +410,6 @@ const (
 	HasNodeLabel           = "node_label_node_name"     // "node" label is present and has the node name
 	HasInstanceLabelPodIp  = "instance_label_pod_ip"    // "node" label is absent, "instance" label has a format of IP address:port
 	HasInstanceLabelOther  = "instance_label_node_name" // "node" label is absent, "instance" label has a different format and assumed to be node name
-	dcgmExporterPivotQuery = "max(DCGM_FI_DEV_GPU_UTIL{}) by (node)"
 )
 
 var once sync.Once
@@ -418,6 +417,7 @@ var once sync.Once
 func DetermineExporters(range5Min *v1.Range) {
 	once.Do(func() {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
+		dcgmExporterPivotQuery := fmt.Sprintf("max(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node)
 		_, _ = common.CollectAndProcessMetric(dcgmExporterPivotQuery, range5Min, determineDcgmExporter)
 	})
 }

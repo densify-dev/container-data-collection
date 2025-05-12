@@ -21,7 +21,6 @@ const (
 	mig               = "mig"
 	capable           = "capable"
 	vgpu              = "v" + common.Gpu
-	Model             = "model" // model is already imported in this package
 	// shared consts
 	mps      = "mps"
 	sharing  = "sharing"
@@ -45,9 +44,8 @@ var (
 	}
 	nvidiaLabelPrefix             = getLabelName(common.Nvidia, false)
 	gkeLabelPrefix                = getLabelName(gke, false)
-	ModelName                     = common.DromedaryCase(Model, common.Name)
 	memTotal                      = common.DromedaryCase(common.Mem, common.Total)
-	candidateMissingGpuAttributes = []string{Model, memTotal}
+	candidateMissingGpuAttributes = []string{common.Model, memTotal}
 	missingGpuAttributes          = make(map[string]bool)
 )
 

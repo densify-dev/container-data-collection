@@ -140,9 +140,9 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 		case common.MemRequest:
 			setValue(&n.memRequest, value)
 			common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, nil)
-		case ModelName:
-			if n.isGpuAttributeMissing(Model) {
-				n.gpuModel = string(ss.Metric[model.LabelName(ModelName)])
+		case common.ModelName:
+			if n.isGpuAttributeMissing(common.Model) {
+				n.gpuModel = string(ss.Metric[model.LabelName(common.ModelName)])
 			}
 		case common.GpuMemoryTotal:
 			if n.isGpuAttributeMissing(memTotal) {

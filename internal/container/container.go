@@ -139,6 +139,7 @@ type container struct {
 	restarts int
 	powerState powerState
 	name       string
+	gpuModel   string
 	labelMap   map[string]string
 }
 
@@ -424,7 +425,7 @@ func Metrics() {
 
 	if node.HasDcgmExporter(range5Min) {
 		mh.metric = common.GpuMemoryTotal
-		query = "sum(DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}) by (namespace, pod, container)"
+		query = fmt.Sprintf("sum(%s) by (namespace, pod, container, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.ModelName)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
@@ -678,19 +679,19 @@ func Metrics() {
 		wq.aggregatorAsSuffix = true
 		wq.aggregators = map[string]string{common.Avg: common.Empty}
 		wq.metricName = common.CamelCase(common.Gpu, common.Utilization)
-		wq.baseQuery = "avg(DCGM_FI_DEV_GPU_UTIL{}) by (namespace, pod, container)"
+		wq.baseQuery = fmt.Sprintf("avg(%s) by (namespace, pod, container)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 		getWorkload(wq)
 		wq.metricName = common.CamelCase(common.Gpu, common.Utilization, common.Gpus)
 		wq.baseQuery += fmt.Sprintf(` * on (namespace,pod,container) kube_pod_container_resource_requests{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
 		getWorkload(wq)
 		wq.metricName = common.CamelCase(common.Gpu, common.Mem, common.Utilization)
-		wq.baseQuery = "avg(100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})) by (namespace, pod, container)"
+		wq.baseQuery = fmt.Sprintf("avg(100 * %s) by (namespace, pod, container)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"))
 		getWorkload(wq)
 		wq.metricName = common.CamelCase(common.Gpu, common.Mem, common.Used)
-		wq.baseQuery = "sum(DCGM_FI_DEV_FB_USED{}) by (namespace, pod, container)"
+		wq.baseQuery = fmt.Sprintf("sum(%s) by (namespace, pod, container)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
 		getWorkload(wq)
 		wq.metricName = common.CamelCase(common.Gpu, common.Power, common.Usage)
-		wq.baseQuery = "sum(DCGM_FI_DEV_POWER_USAGE{}) by (namespace, pod, container)"
+		wq.baseQuery = fmt.Sprintf("sum(%s) by (namespace, pod, container)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
 		getWorkload(wq)
 		// restore the default
 		wq.aggregatorAsSuffix = false

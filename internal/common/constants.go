@@ -110,6 +110,9 @@ const (
 	WorkingSet  = "ws"
 	Power       = "power"
 	Usage       = "usage"
+	Model       = "model"
+	Asterisk    = "*"
+	Hostname    = "Hostname"
 )
 
 // owner kind labels
@@ -165,7 +168,7 @@ var (
 	NodeGroupInclude      = JoinNoSep(Node, Group)
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
-	Asterisk              = "*"
+	ModelName             = DromedaryCase(Model, Name)
 )
 
 // GPU consts and vars
