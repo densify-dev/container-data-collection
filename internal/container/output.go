@@ -112,7 +112,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,QosClass,GpuModel"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -230,7 +230,7 @@ func writeHpaAttrs(name string, cluster map[string]map[string]*hpa) {
 func (h *hpa) writeAttributes(attributeWrite *os.File, cluster, entityKind string, last bool) error {
 	var err error
 	if h == nil {
-		if err = common.PrintCSVStringValue(attributeWrite, ",,,,", last); err != nil {
+		if err = common.PrintCSVStringValue(attributeWrite, ",,,,,", last); err != nil {
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}
@@ -255,7 +255,15 @@ func (h *hpa) writeAttributes(attributeWrite *os.File, cluster, entityKind strin
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}
-		if err = common.PrintCSVNumberValue(attributeWrite, h.metricTargetValue, last); err != nil {
+		if err = common.PrintCSVNumberValue(attributeWrite, h.metricTargetValue, false); err != nil {
+			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
+			return err
+		}
+		var hpaTargetMetrics []string
+		for _, htm := range h.targetMetrics {
+			hpaTargetMetrics = append(hpaTargetMetrics, htm.String())
+		}
+		if err = common.PrintCSVStringValue(attributeWrite, common.Join(hpaSeparator, hpaTargetMetrics...), last); err != nil {
 			common.LogError(err, common.DefaultLogFormat, cluster, entityKind)
 			return err
 		}

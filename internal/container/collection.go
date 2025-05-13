@@ -421,7 +421,9 @@ func newHpa(obj *k8sObject, name, metricName, metricTargetType string, metricTar
 		metricName:        metricName,
 		metricTargetType:  metricTargetType,
 		metricTargetValue: metricTargetValue,
-		labels:            make(map[string]string)}
+		targetMetrics:     []*hpaTargetMetric{{Name: metricName, Type: metricTargetType, Value: metricTargetValue}},
+		labels:            make(map[string]string),
+	}
 	if obj != nil {
 		obj.hpa = h
 	}
@@ -451,6 +453,23 @@ func (h *hpa) addHpa(cluster, nsName, hpaValue string) {
 	m[cluster][nsName][hpaValue] = h
 }
 
+func (h *hpa) merge(metricName, metricTargetType string, metricTargetValue float64) {
+	var f bool
+	for _, tm := range h.targetMetrics {
+		if f = tm.Name == metricName; f {
+			break
+		}
+	}
+	h.targetMetrics = append(h.targetMetrics, &hpaTargetMetric{Name: metricName, Type: metricTargetType, Value: metricTargetValue})
+	if !f {
+		names := []string{h.metricName, metricName}
+		h.metricName = common.Join(hpaSeparator, names...)
+		// need to reset type and value
+		h.metricTargetType = common.Empty
+		h.metricTargetValue = common.UnknownValueFloat
+	}
+}
+
 func findHpa(cluster, nsName, hpaName string) (h *hpa, ok bool) {
 	for _, m := range hpaMaps {
 		if h, ok = m[cluster][nsName][hpaName]; ok {
@@ -476,8 +495,13 @@ func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 			continue
 		}
 		metricTargetValue := common.LastValue(ss)
-		h := newHpa(obj, values[hpaLabel], values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
-		h.addHpa(cluster, nsName, values[hpaLabel])
+		var h *hpa
+		if h, ok = findHpa(cluster, nsName, values[hpaLabel]); ok {
+			h.merge(values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
+		} else {
+			h = newHpa(obj, values[hpaLabel], values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
+			h.addHpa(cluster, nsName, values[hpaLabel])
+		}
 		h.addToLabelMap(ss)
 	}
 }

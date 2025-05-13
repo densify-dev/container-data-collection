@@ -156,6 +156,45 @@ func (obj *k8sObject) isRunningRelevant() bool {
 
 type clusterOwnerships map[string]*ownership
 
+type hpaTargetMetric struct {
+	Name  string  `json:"name"`
+	Type  string  `json:"type"`
+	Value float64 `json:"value"`
+}
+
+func (htm *hpaTargetMetric) String() (s string) {
+	if htm == nil {
+		s = common.Nil
+	} else {
+		s = fmt.Sprintf("%s%s%s%s%.3f", htm.Name, common.Or, htm.Type, common.Or, htm.Value)
+	}
+	return
+}
+func (htm *hpaTargetMetric) Order() (n int) {
+	switch strings.ToLower(htm.Name) {
+	case common.Memory:
+		n = 2
+	case common.Cpu:
+		n = 1
+	}
+	return
+}
+
+func cmpHpaTargetMetric(htm1, htm2 *hpaTargetMetric) (n int) {
+	if htm1 == nil {
+		if htm2 != nil {
+			n = -1
+		}
+	} else {
+		if htm2 == nil {
+			n = 1
+		} else {
+			n = htm1.Order() - htm2.Order()
+		}
+	}
+	return
+}
+
 type hpa struct {
 	obj               *k8sObject
 	name              string
@@ -163,6 +202,7 @@ type hpa struct {
 	metricTargetType  string
 	metricTargetValue float64
 	labels            map[string]string
+	targetMetrics     []*hpaTargetMetric
 	workload          [][]model.SamplePair
 }
 
@@ -586,9 +626,9 @@ func Metrics() {
 	var totals int
 	for _, th := range hpaTypeHolders {
 		hmh := &hpaMetricHolder{objectMetricHolder: &objectMetricHolder{typeHolder: th}}
-		query = fmt.Sprintf("%s%s * on (namespace, %s) group_left(%s, %s) %s%s",
-			hmh.query(common.InfoSt), common.Braces, th.getTypeLabelName(),
-			metricNameLabel, metricTargetTypeLabel, hmh.query(spec, target, common.Metric), common.Braces)
+		query = fmt.Sprintf("%s%s * on (namespace, %s) group_left (%s, %s) %s%s",
+			hmh.query(spec, target, common.Metric), common.Braces, th.getTypeLabelName(),
+			strKind, strName, hmh.query(common.InfoSt), common.Braces)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, hmh.getHpa)
 		query = hmh.query(common.Labels) + common.Braces
 		if n, err = common.CollectAndProcessMetric(query, range5Min, hmh.getHpaMetricString); n > 0 {
