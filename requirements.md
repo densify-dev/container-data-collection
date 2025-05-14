@@ -8,6 +8,7 @@
 - [cAdvisor](https://github.com/google/cadvisor), typically running within the kubelet
 - [Node exporter](https://github.com/prometheus/node_exporter) is required for node analysis and recommendations
 - [OpenShift-state-metrics](https://github.com/openshift/openshift-state-metrics) is required for OpenShift clusters only
+- [DCGM Exporter](https://docs.nvidia.com/datacenter/cloud-native/gpu-telemetry/latest/dcgm-exporter.html), which code is [here](https://github.com/NVIDIA/dcgm-exporter), is required for any Kubernetes cluster which uses Nvidia GPUs. For full Nvidia GPU data it is recommended to install the [Nvidia GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/index.html) in the cluster (the operator installs the DCGM exporter itself)
 - The list of required metrics of the various exporters is described [here](./docs/README.md)
 
 ## Data Source

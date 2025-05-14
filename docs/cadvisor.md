@@ -17,7 +17,7 @@
 | container_fs_usage_bytes                | Container raw disk utilization              | :white_check_mark: |       |        |        |        |         |
 | container_memory_rss                    | Container actual memory utilization         | :white_check_mark: |       |        |        |        |         |
 | container_memory_usage_bytes            | Container raw memory utilization            | :white_check_mark: |       |        |        |        |         |
-| container_memory_working_set_<br/>bytes | Container memory working set                | :white_check_mark: |       |        |        |        |         |
+| container_memory_working_set_<br/>bytes | Container memory working set                | :white_check_mark: | :white_check_mark: |        |        |        |         |
 | container_oom_events_total              | Container number of OOM Kills               | :white_check_mark: |       |        |        |        |         |
 | container_spec_memory_limit_<br/>bytes  | Container memory limit                      | :white_check_mark: |       |        |        |        |         |
 

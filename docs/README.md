@@ -6,6 +6,7 @@ The following documents list the Prometheus metrics collected by Densify's conta
 - [Kubernetes, kubelet & cAdvisor](./cadvisor.md)
 - [Node Exporter](./node-exporter.md)
 - [openshift-state-metrics](./openshift-state-metrics.md)
+- [DCGM Exporter](./dcgm-exporter.md)
 
 Each document also shows how these Prometheus metrics are used by Densify:
 
