@@ -61,7 +61,8 @@ The following applies for both in-cluster Prometheus and observability platform,
 - kube-state-metrics - one and only one instance of kube-state-metrics should be scraped;
 - openshift-state-metrics (OpenShift clusters only) - one and only one instance of openshift-state-metrics should be scraped;
 - cAdvisor is typically running within the kubelet; cAdvisors of **all** cluster nodes' kubelets, and **only** of the cluster nodes' kubelets, should be scraped;
-- Node exporter of **all** cluster nodes, and **only** of the cluster nodes, should be scraped; scraping node exporters from virtual machines and/or cloud instances which are not cluster nodes will cause data integrity issues
+- Node exporter of **all** cluster nodes, and **only** of the cluster nodes, should be scraped; scraping node exporters from virtual machines and/or cloud instances which are not cluster nodes will cause data integrity issues;
+- DCGM exporter of **all** cluster nodes equipped with Nvidia GPUs, and **only** of these cluster nodes, should be scraped
 
 ## Kube-state-metrics Requirements
 
