@@ -78,6 +78,8 @@ dockerHubRepo="densify/"
 release=$(gitCommitHash)
 
 # build the image
+docker pull golang:bookworm
+docker pull ${baseImage}:latest
 docker build --progress=plain -t ${quayImage}:${baseImageArg}-${tag} -f Dockerfile --build-arg BASE_IMAGE=${baseImage} --build-arg VERSION=${tag} --build-arg RELEASE=${release} .
 # use docker login w/ credentials to login to quay.io
 # use docker login w/ credentials to login to Docker hub (no server specified)
