@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	cconf "github.com/densify-dev/container-config/config"
 	"github.com/prometheus/client_golang/api"
@@ -118,6 +119,25 @@ func GetPrometheusVersion() (version string, found bool) {
 		}
 	}
 	failOnConnectionError(err)
+	return
+}
+
+func LogPrometheusTsdbStatus() (err error) {
+	if !Params.Debug || GetObservabilityPlatform() != UnknownPlatform {
+		return
+	}
+	var pa v1.API
+	if pa, err = promApi(Empty); err == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		_ = time.AfterFunc(1*time.Minute, func() { cancel() })
+		var tsdbResult v1.TSDBResult
+		if tsdbResult, err = pa.TSDB(ctx); err == nil {
+			var b []byte
+			if b, err = json.Marshal(&tsdbResult); err == nil {
+				LogAll(1, Debug, "Prometheus TSDB status: %s", string(b))
+			}
+		}
+	}
 	return
 }
 

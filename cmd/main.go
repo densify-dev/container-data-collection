@@ -38,6 +38,9 @@ func main() {
 		logVerPrefix = "Detected "
 	}
 	common.LogAll(1, common.Info, "%sPrometheus version %s", logVerPrefix, ver)
+	if err = common.LogPrometheusTsdbStatus(); err != nil {
+		common.LogErrorWithLevel(1, common.Warn, err, "Failed to log Prometheus TSDB status:")
+	}
 	if err = common.CalculateScrapeIntervals(); err != nil {
 		common.FatalError(err, "Failed to calculate scrape intervals:")
 	}
