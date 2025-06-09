@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
 	"os"
 	"sort"
@@ -205,24 +206,10 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.gpuMemTotal = 0
 			}
 			c.gpuMemTotal += int(value)
-			// also get the GPU model name
-			if gpuModelName, f := common.GetLabelValue(ss, common.ModelName); f {
-				ms := strings.Split(c.gpuModel, common.Or)
-				f = false
-				for _, m := range ms {
-					if f = strings.EqualFold(m, gpuModelName); f {
-						break
-					}
-				}
-				if !f {
-					if len(ms) == 1 && ms[0] == common.Empty {
-						ms = nil
-					}
-					ms = append(ms, gpuModelName)
-					sort.Strings(ms)
-					c.gpuModel = strings.Join(ms, common.Or)
-				}
-			}
+			// also get the GPU model name && sharing strategy
+			concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
+			np := &nodeProvider{cluster: cluster}
+			concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
@@ -239,6 +226,46 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.restarts += int(value)
 		case powerSt:
 			c.powerState = powerState(value)
+		}
+	}
+}
+
+type valueFunc func(string) string
+type equalFunc includeFunc
+
+type nodeProvider struct {
+	cluster string
+}
+
+func (np *nodeProvider) getGpuSharingStrategy(name string) string {
+	return node.GetNodeGpuSharingStrategy(np.cluster, name)
+}
+
+func concatenateValue(ss *model.SampleStream, labelName string, value *string, vf valueFunc, ef equalFunc) {
+	if v, f := common.GetLabelValue(ss, labelName); f {
+		if vf != nil {
+			v = vf(v)
+		}
+		if v == common.Empty {
+			return
+		}
+		if ef == nil {
+			ef = strings.EqualFold
+		}
+		ms := strings.Split(*value, common.Or)
+		f = false
+		for _, m := range ms {
+			if f = ef(m, v); f {
+				break
+			}
+		}
+		if !f {
+			if len(ms) == 1 && ms[0] == common.Empty {
+				ms = nil
+			}
+			ms = append(ms, v)
+			sort.Strings(ms)
+			*value = strings.Join(ms, common.Or)
 		}
 	}
 }

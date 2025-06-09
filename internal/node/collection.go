@@ -141,11 +141,12 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			setValue(&n.memRequest, value)
 			common.WriteWorkload(nwp, nodeWorkloadWriters, common.MemoryRequests, ss, nil)
 		case common.ModelName:
-			if n.isGpuAttributeMissing(common.Model) {
-				n.gpuModel = string(ss.Metric[model.LabelName(common.ModelName)])
+			// override existing model name from node labels
+			if mn := string(ss.Metric[model.LabelName(common.ModelName)]); mn != common.Empty {
+				n.gpuModel = mn
 			}
 		case common.GpuMemoryTotal:
-			if n.isGpuAttributeMissing(memTotal) {
+			if n.gpuMemTotal == common.UnknownValue {
 				setValue(&n.gpuMemTotal, value)
 			}
 		}
@@ -176,11 +177,6 @@ func getNodeMetricString(cluster string, result model.Matrix) {
 			srcMaps[i][k] = v
 		}
 		applyGpuLabels(cluster, n, srcMaps[1])
-		for _, gpuAttr := range candidateMissingGpuAttributes {
-			if n.isGpuAttributeMissing(gpuAttr) {
-				missingGpuAttributes[gpuAttr] = true
-			}
-		}
 		for i := 0; i < l; i++ {
 			for key, value := range srcMaps[i] {
 				common.AddToLabelMap(key, value, dstMaps[i])

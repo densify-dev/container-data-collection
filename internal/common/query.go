@@ -185,3 +185,16 @@ func LabelReplace(query, dstLabel, srcLabel string, lrc LabelReplaceCondition) s
 func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
 }
+
+func AggOverTimeQuery(q string, agg string) string {
+	return fmt.Sprintf("%s_over_time(%s[%v:])", agg, q, Step)
+}
+
+func DcgmAggOverTimeQuery(q string, agg string) string {
+	return AggOverTimeQuery(DcgmExporterLabelReplace(q), agg)
+}
+
+// SafeDcgmGpuUtilizationQuery is a query that checks if the GPU utilization is capped by 100%.
+// Required as in some cases in the wild we've observed values like 100,000%, which mess up averaging and other calculations.
+// Not clear if this was caused by a GPU which is pegged to 100% or an issue in DCGM exporter
+var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))

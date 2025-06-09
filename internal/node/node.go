@@ -57,18 +57,6 @@ type node struct {
 	taints                                                           taints
 }
 
-func (n *node) isGpuAttributeMissing(attrName string) (b bool) {
-	if n.gpuVendor != common.Empty {
-		switch attrName {
-		case common.Model:
-			b = n.gpuModel == common.Empty
-		case memTotal:
-			b = n.gpuMemTotal == common.UnknownValue
-		}
-	}
-	return
-}
-
 // Map that labels and values will be stored in
 var nodes = make(map[string]map[string]*node)
 
@@ -117,16 +105,14 @@ func Metrics() {
 
 	mh.labelName = common.Node
 	if HasDcgmExporter(range5Min) {
-		if missingGpuAttributes[common.Model] {
-			mh.name = common.ModelName
-			query = fmt.Sprintf("max(%s) by (%s, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node, common.ModelName)
-			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
-		}
-		if missingGpuAttributes[memTotal] {
-			mh.name = common.GpuMemoryTotal
-			query = fmt.Sprintf("sum(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.Node)
-			_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
-		}
+		// The model name should be collect in any case and override what we got from the node labels
+		// (for consistency with the containers' model name)
+		mh.name = common.ModelName
+		query = fmt.Sprintf("max(%s) by (%s, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node, common.ModelName)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
+		mh.name = common.GpuMemoryTotal
+		query = fmt.Sprintf("sum(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.Node)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
 	// Queries the capacity fields of all nodes
 	mh.name = common.Capacity
@@ -224,7 +210,7 @@ func Metrics() {
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 	if HasDcgmExporter(range5Min) {
-		query = qw.AvgQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
+		query = qw.AvgQuery.Wrap(common.SafeDcgmGpuUtilizationQuery)
 		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		query += fmt.Sprintf(` * on (node) kube_node_status_allocatable{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
 		common.GpuUtilizationGpusAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)

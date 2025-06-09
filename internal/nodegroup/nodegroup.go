@@ -410,7 +410,7 @@ func Metrics() {
 		query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
 		getWorkload(common.MemoryBytes, query, ngl)
 
-		query = qw.Query.Wrap(node.GetMemActualQuery())
+		query = qw.Query.Wrap(fmt.Sprintf("(%s)", node.GetMemActualQuery()))
 		getWorkload(common.MemoryActualWorkload, query, ngl)
 
 		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)

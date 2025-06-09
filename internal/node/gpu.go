@@ -42,12 +42,17 @@ var (
 			true:  labelGkeGpuComponents,
 		},
 	}
-	nvidiaLabelPrefix             = getLabelName(common.Nvidia, false)
-	gkeLabelPrefix                = getLabelName(gke, false)
-	memTotal                      = common.DromedaryCase(common.Mem, common.Total)
-	candidateMissingGpuAttributes = []string{common.Model, memTotal}
-	missingGpuAttributes          = make(map[string]bool)
+	nvidiaLabelPrefix = getLabelName(common.Nvidia, false)
+	gkeLabelPrefix    = getLabelName(gke, false)
+	memTotal          = common.DromedaryCase(common.Mem, common.Total)
 )
+
+func GetNodeGpuSharingStrategy(cluster, nodeName string) (gss string) {
+	if n := nodes[cluster][nodeName]; n != nil {
+		gss = n.gpuSharingStrategy
+	}
+	return
+}
 
 func isGpuLabel(key string) bool {
 	return strings.HasPrefix(key, nvidiaLabelPrefix) ||

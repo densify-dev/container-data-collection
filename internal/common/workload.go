@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -116,31 +117,40 @@ var (
 	PodsLimits               = NewWorkloadMetricHolder(Pods, Limits).OverrideFileName(Pods)
 	CpuReservationPercent    = NewWorkloadMetricHolder(Cpu, Reservation, Percent)
 	MemoryReservationPercent = NewWorkloadMetricHolder(Memory, Reservation, Percent)
+	GpuReservationPercent    = NewWorkloadMetricHolder(Gpu, Reservation, Percent)
 	PodCount                 = NewWorkloadMetricHolder(Pod, Count)
 	OomKillEvents            = NewWorkloadMetricHolder(Oom, Kill, Events)
 	CpuThrottlingEvents      = NewWorkloadMetricHolder(Cpu, Throttling, Events)
 )
 
 const (
-	FilterTerminatedContainersClause = ` unless on (namespace,pod) max(kube_pod_status_phase{phase!="Running"}) by (namespace,pod) == 1 or on (namespace,pod,container) max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container) == 1`
+	FilterTerminatedContainersClause = ` unless on (namespace,pod,container) (max(kube_pod_status_phase{phase!="Running"}) by (namespace,pod) == 1 or max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container) == 1)`
 )
 
 func FilterTerminatedContainers(prefix, suffix string) string {
 	return prefix + FilterTerminatedContainersClause + suffix
 }
 
+func QueryForResource(query, resource string) string {
+	return strings.ReplaceAll(query, Braces, fmt.Sprintf(`{%s="%s"}`, Resource, resource))
+}
+
 var conditionalQueries = map[bool][]string{
 	true: {
-		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests{resource="cpu"}`, `) by (node)%s)`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="cpu"}`, `) by (node) / sum(kube_node_status_allocatable{resource="cpu"}) by (node)%s) * 100`),
-		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024`, `) by (node)%s)`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests{resource="memory"}/1024/1024`, `) by (node) / sum(kube_node_status_allocatable{resource="memory"}/1024/1024) by (node)%s) * 100`),
+		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}", Cpu), ") by (node)%s)"),
+		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", Cpu), QueryForResource(") by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", Cpu)),
+		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}/1024/1024", Memory), ") by (node)%s)"),
+		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", Memory), QueryForResource("`) by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", Memory)),
+		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}", NvidiaGpuResource), ") by (node)%s)"),
+		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", NvidiaGpuResource), QueryForResource(") by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", NvidiaGpuResource)),
 	},
 	false: {
 		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node)%s)`),
 		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`),
 		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node)%s)`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node) / sum(kube_node_status_allocatable_memory_bytes{}/1024/1024) by (node)%s) * 100`),
+		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_memory_bytes{}`, `) by (node) / sum(kube_node_status_allocatable_memory_bytes{}) by (node)%s) * 100`),
+		Empty, // No query for GpuRequests
+		Empty, // No query for GpuReservationPercent
 	},
 }
 
@@ -149,11 +159,16 @@ var conditionalMetricHolders = []*WorkloadMetricHolder{
 	CpuReservationPercent,
 	MemoryRequests,
 	MemoryReservationPercent,
+	GpuRequests,
+	GpuReservationPercent,
 }
 
 func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, querySubToMetricFields map[string][]model.LabelName, entityKind string, subject string) {
 	for _, f := range FoundIndicatorCounter(indicators, indicator) {
 		for i, q := range conditionalQueries[f] {
+			if q == Empty {
+				continue
+			}
 			// substitute querySub in query and recreate queryToMetricFields map
 			qps := make(map[string]*QueryProcessor, len(querySubToMetricFields))
 			for querySub, metricFields := range querySubToMetricFields {

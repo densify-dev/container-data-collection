@@ -113,6 +113,7 @@ const (
 	Model       = "model"
 	Asterisk    = "*"
 	Hostname    = "Hostname"
+	None        = "none"
 )
 
 // owner kind labels
