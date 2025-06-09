@@ -791,7 +791,7 @@ var gpuWorkloadQueries = []*gpuWorkloadQuery{
 	},
 	{
 		metricName:       common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
-		baseQuery:        fmt.Sprintf(` * on (namespace,pod,container) kube_pod_container_resource_requests{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource),
+		baseQuery:        common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
 		appendToPrevious: true,
 	},
 	{

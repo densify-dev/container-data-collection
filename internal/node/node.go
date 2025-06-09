@@ -212,7 +212,7 @@ func Metrics() {
 	if HasDcgmExporter(range5Min) {
 		query = qw.AvgQuery.Wrap(common.SafeDcgmGpuUtilizationQuery)
 		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
-		query += fmt.Sprintf(` * on (node) kube_node_status_allocatable{%s="%s"} / 100`, common.Resource, common.NvidiaGpuResource)
+		query += GpuPercentQuerySuffix
 		common.GpuUtilizationGpusAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		query = qw.AvgQuery.Wrap("100 * " + common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"))
 		common.GpuMemUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)

@@ -394,59 +394,82 @@ func Metrics() {
 	query = `sum(kube_node_labels{` + nodeGroupLabelPlaceholder + `=~".+"}) by (` + nodeGroupLabelPlaceholder + `)`
 	getWorkload(common.CurrentSize, query, ngl)
 
-	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
-	if !node.HasNodeExporter(range5Min) {
-		err = fmt.Errorf("prometheus node exporter metrics not present for any cluster")
-		common.LogError(err, "entity=%s", common.NodeGroupEntityKind)
-		return
+	qws := node.GetQueryWrappers(&queryWrappers, queryWrappersMap)
+
+	if node.HasNodeExporter(range5Min) {
+		for _, qw := range qws {
+			query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
+			query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+			getWorkload(common.CpuUtilization, query, ngl)
+
+			query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
+			getWorkload(common.MemoryBytes, query, ngl)
+
+			query = qw.Query.Wrap(fmt.Sprintf("(%s)", node.GetMemActualQuery()))
+			getWorkload(common.MemoryActualWorkload, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.DiskReadBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.DiskWriteBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.DiskTotalBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.DiskReadOps, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.DiskWriteOps, query, ngl)
+
+			query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
+			getWorkload(common.DiskTotalOps, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetReceivedBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetSentBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetTotalBytes, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetReceivedPackets, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetSentPackets, query, ngl)
+
+			query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+			getWorkload(common.NetTotalPackets, query, ngl)
+		}
+	} else {
+		common.LogAll(1, common.Error, "entity=%s prometheus node exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 	}
 
-	for _, qw := range node.GetQueryWrappers(&queryWrappers, queryWrappersMap) {
+	if node.HasDcgmExporter(range5Min) {
+		gwmhs := map[string]*common.WorkloadMetricHolder{
+			common.Empty:               common.GpuUtilizationAvg,
+			node.GpuPercentQuerySuffix: common.GpuUtilizationGpusAvg,
+		}
+		for _, qw := range qws {
+			for q, wmh := range gwmhs {
+				query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
+				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+				getWorkload(wmh, query, ngl)
+			}
+			query = fmt.Sprintf(" 100 * avg(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"), qw.MetricField[0])
+			query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+			getWorkload(common.GpuMemUtilizationAvg, query, ngl)
 
-		query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
-		query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-		getWorkload(common.CpuUtilization, query, ngl)
+			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
+			getWorkload(common.GpuMemUsedAvg, query, ngl)
 
-		query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
-		getWorkload(common.MemoryBytes, query, ngl)
-
-		query = qw.Query.Wrap(fmt.Sprintf("(%s)", node.GetMemActualQuery()))
-		getWorkload(common.MemoryActualWorkload, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.DiskReadBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.DiskWriteBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.DiskTotalBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.DiskReadOps, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.DiskWriteOps, query, ngl)
-
-		query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
-		getWorkload(common.DiskTotalOps, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetReceivedBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetSentBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetTotalBytes, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetReceivedPackets, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetSentPackets, query, ngl)
-
-		query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-		getWorkload(common.NetTotalPackets, query, ngl)
+			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
+			getWorkload(common.GpuPowerUsageAvg, query, ngl)
+		}
+	} else {
+		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 	}
 }

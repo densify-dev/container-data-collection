@@ -198,3 +198,8 @@ func DcgmAggOverTimeQuery(q string, agg string) string {
 // Required as in some cases in the wild we've observed values like 100,000%, which mess up averaging and other calculations.
 // Not clear if this was caused by a GPU which is pegged to 100% or an issue in DCGM exporter
 var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
+
+func DcgmPercentQuerySuffix(metric string, onWhat ...string) string {
+	what := strings.Join(onWhat, Comma)
+	return fmt.Sprintf(` * on (%s) %s{%s="%s"} / 100`, what, metric, Resource, NvidiaGpuResource)
+}

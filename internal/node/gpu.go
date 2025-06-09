@@ -110,3 +110,5 @@ func appendGpu(s []string) []string {
 func getLabelName(labelProvider string, includeGpu bool, elements ...string) string {
 	return common.SnakeCase(append(prefixComponents[labelProvider][includeGpu], elements...)...)
 }
+
+var GpuPercentQuerySuffix = common.DcgmPercentQuerySuffix("kube_node_status_allocatable", common.Node)
