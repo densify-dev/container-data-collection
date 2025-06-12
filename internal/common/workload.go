@@ -135,23 +135,52 @@ func QueryForResource(query, resource string) string {
 	return strings.ReplaceAll(query, Braces, fmt.Sprintf(`{%s="%s"}`, Resource, resource))
 }
 
-var conditionalQueries = map[bool][]string{
-	true: {
-		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}", Cpu), ") by (node)%s)"),
-		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", Cpu), QueryForResource(") by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", Cpu)),
-		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}/1024/1024", Memory), ") by (node)%s)"),
-		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", Memory), QueryForResource("`) by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", Memory)),
-		FilterTerminatedContainers(QueryForResource("sum(sum(kube_pod_container_resource_requests{}", NvidiaGpuResource), ") by (node)%s)"),
-		FilterTerminatedContainers(QueryForResource("avg(sum(kube_pod_container_resource_requests{}", NvidiaGpuResource), QueryForResource(") by (node) / sum(kube_node_status_allocatable{}) by (node)%s) * 100", NvidiaGpuResource)),
-	},
-	false: {
-		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node)%s)`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_cpu_cores{}`, `) by (node) / sum(kube_node_status_allocatable_cpu_cores{}) by (node)%s) * 100`),
-		FilterTerminatedContainers(`sum(sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024`, `) by (node)%s)`),
-		FilterTerminatedContainers(`avg(sum(kube_pod_container_resource_requests_memory_bytes{}`, `) by (node) / sum(kube_node_status_allocatable_memory_bytes{}) by (node)%s) * 100`),
-		Empty, // No query for GpuRequests
-		Empty, // No query for GpuReservationPercent
-	},
+func nodeRequestsQuery(resource, suffix string) string {
+	var prefix string
+	switch resource {
+	case Cpu, Memory, NvidiaGpuResource:
+		prefix = QueryForResource("sum(sum(kube_pod_container_resource_requests{}"+suffix, resource)
+	default:
+		prefix = fmt.Sprintf("sum(sum(kube_pod_container_resource_requests_%s{}%s", resource, suffix)
+	}
+	return FilterTerminatedContainers(prefix, ") by (node)%s)")
+}
+
+func nodeReservationPercentQuery(resource string) string {
+	var prefix, suffix string
+	switch resource {
+	case Cpu, Memory, NvidiaGpuResource:
+		prefix = QueryForResource("100 * sum(sum(kube_pod_container_resource_requests{}", resource)
+		suffix = QueryForResource(") by (node)%s) / sum(sum(kube_node_status_allocatable{}) by (node)%s)", resource)
+	default:
+		prefix = fmt.Sprintf("100 * sum(sum(kube_pod_container_resource_requests_%s{}", resource)
+		suffix = ") by (node)%s) / sum(sum(kube_node_status_allocatable_" + resource + "{}) by (node)%s)"
+	}
+	return FilterTerminatedContainers(prefix, suffix)
+}
+
+func nodeConditionalQueries(resource, suffix string) []string {
+	return []string{
+		nodeRequestsQuery(resource, suffix),
+		nodeReservationPercentQuery(resource),
+	}
+}
+
+var conditionalQueries = makeConditionalQueries()
+
+const (
+	toMiB = "/1024/1024"
+)
+
+func makeConditionalQueries() map[bool][]string {
+	m := make(map[bool][]string, 2)
+	m[true] = append(m[true], nodeConditionalQueries(Cpu, Empty)...)
+	m[true] = append(m[true], nodeConditionalQueries(Memory, toMiB)...)
+	m[true] = append(m[true], nodeConditionalQueries(NvidiaGpuResource, Empty)...)
+	m[false] = append(m[false], nodeConditionalQueries(SnakeCase(Cpu, "cores"), Empty)...)
+	m[false] = append(m[false], nodeConditionalQueries(SnakeCase(Memory, "bytes"), toMiB)...)
+	m[false] = append(m[false], Empty, Empty) // No queries for GpuRequests and GpuReservationPercent
+	return m
 }
 
 var conditionalMetricHolders = []*WorkloadMetricHolder{
@@ -171,8 +200,13 @@ func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, 
 			}
 			// substitute querySub in query and recreate queryToMetricFields map
 			qps := make(map[string]*QueryProcessor, len(querySubToMetricFields))
+			n := strings.Count(q, "%s")
 			for querySub, metricFields := range querySubToMetricFields {
-				query := fmt.Sprintf(q, querySub)
+				querySubs := make([]any, n)
+				for j := 0; j < n; j++ {
+					querySubs[j] = querySub
+				}
+				query := fmt.Sprintf(q, querySubs...)
 				qps[query] = &QueryProcessor{MetricFields: metricFields}
 			}
 			cmh := conditionalMetricHolders[i]
