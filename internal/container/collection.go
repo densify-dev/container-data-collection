@@ -522,11 +522,13 @@ func (th *typeHolder) getHpa(cluster string, result model.Matrix) {
 			continue
 		}
 		metricTargetValue := common.LastValue(ss)
+		// some keda metrics may show up with a comma which will break the CSV
+		metricName := strings.ReplaceAll(values[metricNameLabel], common.Comma, common.Underscore)
 		var h *hpa
 		if h, ok = findHpa(cluster, nsName, values[hpaLabel]); ok {
-			h.merge(values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
+			h.merge(metricName, values[metricTargetTypeLabel], metricTargetValue)
 		} else {
-			h = newHpa(obj, values[hpaLabel], values[metricNameLabel], values[metricTargetTypeLabel], metricTargetValue)
+			h = newHpa(obj, values[hpaLabel], metricName, values[metricTargetTypeLabel], metricTargetValue)
 			h.addHpa(cluster, nsName, values[hpaLabel])
 		}
 		h.addToLabelMap(ss)
