@@ -205,7 +205,7 @@ func (lf *labelFilter) calculateFilter(lss ...model.LabelSet) {
 		}
 		lfn := string(ln)
 		lnfs[i] = lfn
-		lfs[i] = lfn + op + doubleQuote + Join(Or, vals...) + doubleQuote
+		lfs[i] = lfn + op + DoubleQuote + Join(Or, vals...) + DoubleQuote
 	}
 	lf.labelNames = JoinComma(lnfs...)
 	lf.labels = JoinComma(lfs...)

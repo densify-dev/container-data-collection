@@ -173,7 +173,7 @@ func ConditionalPrintCSVLabelMap(file *os.File, labelMap map[string]string, last
 			maxValueLen = maxKeyLen + 3 - lkey
 		}
 		value := labelMap[key]
-		value = strings.ReplaceAll(strings.ReplaceAll(value, Comma, Space), doubleQuote, Empty)
+		value = strings.ReplaceAll(strings.ReplaceAll(value, Comma, Space), DoubleQuote, Empty)
 		if len(value) > maxValueLen {
 			value = value[:maxValueLen]
 		}

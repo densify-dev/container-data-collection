@@ -231,7 +231,7 @@ const (
 	exactEqual         = "="
 	regexMatch         = "=~"
 	Or                 = "|"
-	doubleQuote        = "\""
+	DoubleQuote        = "\""
 	leftBrace          = "{"
 	rightBrace         = "}"
 	leftBracket        = "("
