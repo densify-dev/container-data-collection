@@ -160,6 +160,14 @@ func PrintCSVLabelMap(file *os.File, labelMap map[string]string, last bool) erro
 	return ConditionalPrintCSVLabelMap(file, labelMap, last, nil)
 }
 
+var (
+	safeLabelReplacements = map[string]string{
+		Comma:       Space,
+		DoubleQuote: Empty,
+		Or:          Space,
+	}
+)
+
 func ConditionalPrintCSVLabelMap(file *os.File, labelMap map[string]string, last bool, rejectKeys map[string]bool) (err error) {
 	keys := SortedKeySet(labelMap)
 	for _, key := range keys {
@@ -173,7 +181,9 @@ func ConditionalPrintCSVLabelMap(file *os.File, labelMap map[string]string, last
 			maxValueLen = maxKeyLen + 3 - lkey
 		}
 		value := labelMap[key]
-		value = strings.ReplaceAll(strings.ReplaceAll(value, Comma, Space), DoubleQuote, Empty)
+		for unsafe, safe := range safeLabelReplacements {
+			value = strings.ReplaceAll(value, unsafe, safe)
+		}
 		if len(value) > maxValueLen {
 			value = value[:maxValueLen]
 		}
