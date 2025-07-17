@@ -1,0 +1,119 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: densify/container-optimization-data-forwarder
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract tag name and determine if official release
+        id: extract_tag
+        run: |
+          tag=${GITHUB_REF#refs/tags/}
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
+          
+          # Check if this is an official release (not alpha, beta, rc, etc.)
+          if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_official=true" >> $GITHUB_OUTPUT
+            # Extract major version (e.g., v4.2.2 -> v4)
+            major_version=$(echo "${tag}" | sed -E 's/^(v[0-9]+)\.[0-9]+\.[0-9]+$/\1/')
+            echo "major_version=${major_version}" >> $GITHUB_OUTPUT
+          else
+            echo "is_official=false" >> $GITHUB_OUTPUT
+            echo "major_version=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get commit SHA
+        id: get_sha
+        run: echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=alpine-${{ steps.extract_tag.outputs.tag }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:alpine-${{ steps.extract_tag.outputs.tag }}
+            ${{ steps.extract_tag.outputs.is_official == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.extract_tag.outputs.major_version) || '' }}
+            ${{ steps.extract_tag.outputs.is_official == 'true' && format('{0}/{1}:alpine-{2}', env.REGISTRY, env.IMAGE_NAME, steps.extract_tag.outputs.major_version) || '' }}
+          build-args: |
+            BASE_IMAGE=alpine
+            VERSION=${{ steps.extract_tag.outputs.tag }}
+            RELEASE=${{ steps.get_sha.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (table output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
+          format: cyclonedx-json
+          output-file: 'sbom.cyclonedx.json'
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'sbom-${{ steps.extract_tag.outputs.tag }}'
+          path: 'sbom.cyclonedx.json'
+          retention-days: 90
