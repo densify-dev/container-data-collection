@@ -38,6 +38,11 @@ The workflow is triggered when you create a new tag in the repository. It will:
    - `DOCKER_USERNAME`: Your Docker Hub username
    - `DOCKER_PASSWORD`: Your Docker Hub password or access token
 
+3. **GitHub Permissions**: The workflow requires the following permissions (automatically granted):
+   - `contents: read` - To checkout the repository
+   - `packages: write` - To push Docker images
+   - `security-events: write` - To upload security scan results to GitHub Security tab
+
 ### Adding Secrets
 
 1. Go to your GitHub repository
@@ -179,6 +184,17 @@ If the security scan fails the build:
 2. Check the GitHub Security tab for detailed vulnerability information
 3. Update base images or dependencies to fix vulnerabilities
 4. Consider using `.trivyignore` file to ignore false positives (use carefully)
+
+### Security Scan Upload Issues
+
+If you see "Resource not accessible by integration" errors:
+
+1. **Check Repository Settings**: Ensure Code scanning is enabled
+   - Go to Settings → Code security and analysis
+   - Enable "Code scanning" if not already enabled
+2. **Verify Permissions**: The workflow needs `security-events: write` permission
+   - This is automatically granted by the workflow configuration
+3. **Organization Settings**: For organization repositories, ensure security features are enabled at the org level
 
 ### Tag Format
 
