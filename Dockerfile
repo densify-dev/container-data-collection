@@ -13,6 +13,8 @@ ARG BASE_IMAGE
 ENV BASE_IMG=${BASE_IMAGE}
 ARG VERSION
 ARG RELEASE
+# Enable Docker BuildKit automatic platform ARGs for runtime stage
+ARG TARGETARCH
 
 ### Required OpenShift Labels
 LABEL name="Container-Optimization-Data-Forwarder" \
@@ -56,7 +58,7 @@ RUN mkdir /config
 
 WORKDIR /home/densify
 RUN mkdir -p data && chown -R densify:densify /home/densify/data && chmod -R 777 /home/densify/data && ln -s /config config
-COPY --chown=densify:densify --chmod=755 ./tools/forwarder ./tools/entry.sh bin/
+COPY --chown=densify:densify --chmod=755 ./tools/${TARGETARCH}/forwarder ./tools/entry.sh bin/
 COPY --chown=densify:densify --chmod=755 --from=builder /github.com/densify-dev/container-data-collection/cmd/dataCollection bin/
 USER 3000
 CMD ["/home/densify/bin/entry.sh"]
