@@ -136,6 +136,8 @@ fi
 
 # build the image
 echo "Building image for platforms: ${platforms:-"current platform"}"
+docker pull golang:bookworm
+docker pull ${baseImage}:latest
 
 if [ "${usesBuildx}" = true ]; then
     # Use buildx for multi-platform builds
@@ -172,8 +174,6 @@ if [ "${usesBuildx}" = true ]; then
     fi
 else
     # Use regular docker build for single platform
-    docker pull golang:bookworm
-    docker pull ${baseImage}:latest
     docker build --progress=plain -t ${quayImage}:${baseImageArg}-${tag} -f Dockerfile --build-arg BASE_IMAGE=${baseImage} --build-arg VERSION=${tag} --build-arg RELEASE=${release} .
     
     # Traditional push logic for single platform builds
