@@ -19,14 +19,14 @@ The workflow is triggered when you create a new tag in the repository. It will:
 - `densify/container-optimization-data-forwarder:alpine-${tag}`
 
 ### For official releases only (format: v#.#.#):
-- `densify/container-optimization-data-forwarder:v${major_version}` (e.g., `v4` for `v4.2.2`)
-- `densify/container-optimization-data-forwarder:alpine-v${major_version}` (e.g., `alpine-v4` for `v4.2.2`)
+- `densify/container-optimization-data-forwarder:${major_version}` (e.g., `4` for `v4.2.2`)
+- `densify/container-optimization-data-forwarder:alpine-${major_version}` (e.g., `alpine-4` for `v4.2.2`)
 
 ### Official vs Non-Official Releases
 
 **Official releases** follow the pattern `v#.#.#` (e.g., `v4.2.2`, `v1.0.0`) and will also get major version tags.
 
-**Non-official releases** like `v4.2.2-beta1`, `v4.2.2-alpha`, `v4.2.2-rc1` will only get the exact tag, not the major version tag. This ensures that customers pulling `v4` always get the latest stable release, not a pre-release version.
+**Non-official releases** like `v4.2.2-beta1`, `v4.2.2-alpha`, `v4.2.2-rc1` will only get the exact tag, not the major version tag. This ensures that customers pulling `4` always get the latest stable release, not a pre-release version.
 
 ## Setup
 
@@ -73,8 +73,8 @@ git push origin v4.2.2-beta1
 **Official Release `v4.2.2`** creates these tags:
 - `densify/container-optimization-data-forwarder:v4.2.2`
 - `densify/container-optimization-data-forwarder:alpine-v4.2.2`
-- `densify/container-optimization-data-forwarder:v4` ← Updates major version
-- `densify/container-optimization-data-forwarder:alpine-v4` ← Updates major version
+- `densify/container-optimization-data-forwarder:4` ← Updates major version
+- `densify/container-optimization-data-forwarder:alpine-4` ← Updates major version
 
 **Beta Release `v4.2.2-beta1`** creates only:
 - `densify/container-optimization-data-forwarder:v4.2.2-beta1`
@@ -207,4 +207,4 @@ The workflow handles different tag formats:
 - `v4.2.2-beta1`, `v4.2.2-alpha`, `v4.2.2-rc1` - Beta, alpha, release candidates
 - `v4.2.2-hotfix`, `v4.2.2.1` - Hotfixes or patch releases with additional identifiers
 
-This ensures that major version tags (like `v4`) always point to the latest stable release, never to pre-release versions.
+This ensures that major version tags (like `4`) always point to the latest stable release, never to pre-release versions.
