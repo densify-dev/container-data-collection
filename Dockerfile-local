@@ -50,7 +50,6 @@ RUN mkdir /config
 
 WORKDIR /home/densify
 RUN mkdir -p data && chown -R densify:densify /home/densify/data && chmod -R 777 /home/densify/data && ln -s /config config
-COPY --chown=densify:densify --chmod=755 ./tools/${TARGETARCH}/forwarder ./tools/entry.sh bin/
-COPY --chown=densify:densify --chmod=755 ./build/${TARGETARCH}/dataCollection bin/
+COPY --chown=densify:densify --chmod=755 ./build/${TARGETARCH}/dataCollection ./tools/${TARGETARCH}/forwarder ./tools/entry.sh bin/
 USER 3000
 CMD ["/home/densify/bin/entry.sh"]
