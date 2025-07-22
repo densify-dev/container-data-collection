@@ -14,19 +14,26 @@ The workflow is triggered when you create a new tag in the repository. It will:
 6. Generate Software Bill of Materials (SBOM) using Syft in CycloneDX JSON format
 7. Upload SBOM as a downloadable artifact
 
+### Git tags vs. image tags
+
+Git tags are semver tags, preceded by v, with an optional non-official identifier as `-alpha`, `-rc1` etc.
+Examples: `v4.2.2`, `v4.2.2-beta1` etc.
+Image tags are derived from the git tags, but the leading 'v' is stripped off as that's the practice.
+**The rest of this document refers to image tags, unless specifically git tags are mentioned.**
+
 ### For all tags:
 - `densify/container-optimization-data-forwarder:${tag}`
 - `densify/container-optimization-data-forwarder:alpine-${tag}`
 
-### For official releases only (format: v#.#.#):
-- `densify/container-optimization-data-forwarder:${major_version}` (e.g., `4` for `v4.2.2`)
-- `densify/container-optimization-data-forwarder:alpine-${major_version}` (e.g., `alpine-4` for `v4.2.2`)
+### For official releases only (format: #.#.#):
+- `densify/container-optimization-data-forwarder:${major_version}` (e.g., `4` for `4.2.2`)
+- `densify/container-optimization-data-forwarder:alpine-${major_version}` (e.g., `alpine-4` for `4.2.2`)
 
 ### Official vs Non-Official Releases
 
-**Official releases** follow the pattern `v#.#.#` (e.g., `v4.2.2`, `v1.0.0`) and will also get major version tags.
+**Official releases** follow the pattern `#.#.#` (e.g., `4.2.2`, `1.0.0`) and will also get major version tags.
 
-**Non-official releases** like `v4.2.2-beta1`, `v4.2.2-alpha`, `v4.2.2-rc1` will only get the exact tag, not the major version tag. This ensures that customers pulling `4` always get the latest stable release, not a pre-release version.
+**Non-official releases** like `4.2.2-beta1`, `4.2.2-alpha`, `4.2.2-rc1` will only get the exact tag, not the major version tag. This ensures that customers pulling `4` always get the latest stable release, not a pre-release version.
 
 ## Setup
 
@@ -56,7 +63,7 @@ The workflow is triggered when you create a new tag in the repository. It will:
 
 ### Creating a Release
 
-To trigger a build, create and push a new tag:
+To trigger a build, create and push a new **git tag**:
 
 ```bash
 # Official release (will also create major version tags)
@@ -70,15 +77,15 @@ git push origin v4.2.2-beta1
 
 ### Examples
 
-**Official Release `v4.2.2`** creates these tags:
-- `densify/container-optimization-data-forwarder:v4.2.2`
-- `densify/container-optimization-data-forwarder:alpine-v4.2.2`
+**Official Release `4.2.2`** creates these tags:
+- `densify/container-optimization-data-forwarder:4.2.2`
+- `densify/container-optimization-data-forwarder:alpine-4.2.2`
 - `densify/container-optimization-data-forwarder:4` ← Updates major version
 - `densify/container-optimization-data-forwarder:alpine-4` ← Updates major version
 
-**Beta Release `v4.2.2-beta1`** creates only:
-- `densify/container-optimization-data-forwarder:v4.2.2-beta1`
-- `densify/container-optimization-data-forwarder:alpine-v4.2.2-beta1`
+**Beta Release `4.2.2-beta1`** creates only:
+- `densify/container-optimization-data-forwarder:4.2.2-beta1`
+- `densify/container-optimization-data-forwarder:alpine-4.2.2-beta1`
 
 ### Build Arguments
 
@@ -129,7 +136,7 @@ The workflow generates a comprehensive SBOM using Syft:
 
 1. Go to the completed workflow run in GitHub Actions
 2. Scroll down to the "Artifacts" section
-3. Download the `sbom-${tag}` artifact (e.g., `sbom-v4.2.2`)
+3. Download the `sbom-${tag}` artifact (e.g., `sbom-4.2.2`)
 4. Extract the ZIP file to access `sbom.cyclonedx.json`
 
 ## Multi-Platform Support
@@ -201,10 +208,10 @@ If you see "Resource not accessible by integration" errors:
 The workflow handles different tag formats:
 
 **Official Releases** (will create major version tags):
-- `v4.2.2`, `v1.0.0`, `v10.5.3` - Standard semantic versioning
+- `4.2.2`, `1.0.0`, `10.5.3` - Standard semantic versioning
 
 **Pre-releases** (exact tag only, no major version updates):
-- `v4.2.2-beta1`, `v4.2.2-alpha`, `v4.2.2-rc1` - Beta, alpha, release candidates
-- `v4.2.2-hotfix`, `v4.2.2.1` - Hotfixes or patch releases with additional identifiers
+- `4.2.2-beta1`, `4.2.2-alpha`, `4.2.2-rc1` - Beta, alpha, release candidates
+- `4.2.2-hotfix`, `4.2.2.1` - Hotfixes or patch releases with additional identifiers
 
 This ensures that major version tags (like `4`) always point to the latest stable release, never to pre-release versions.

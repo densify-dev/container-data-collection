@@ -27,13 +27,15 @@ jobs:
         id: extract_tag
         run: |
           tag=${GITHUB_REF#refs/tags/}
+          # remove leading 'v' from semver tags (e.g. v4.2.3-alpha -> 4.2.3-alpha)
+          tag=$(echo "${tag}" | sed -E 's/^v([0-9]+.*)$/\1/')
           echo "tag=${tag}" >> $GITHUB_OUTPUT
           
           # Check if this is an official release (not alpha, beta, rc, etc.)
-          if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "is_official=true" >> $GITHUB_OUTPUT
-            # Extract major version (e.g., v4.2.2 -> v4)
-            major_version=$(echo "${tag}" | sed -E 's/^v([0-9]+)\.[0-9]+\.[0-9]+$/\1/')
+            # Extract major version (e.g., 4.2.2 -> 4)
+            major_version=$(echo "${tag}" | sed -E 's/^([0-9]+)\.[0-9]+\.[0-9]+$/\1/')
             echo "major_version=${major_version}" >> $GITHUB_OUTPUT
           else
             echo "is_official=false" >> $GITHUB_OUTPUT
