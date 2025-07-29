@@ -56,7 +56,11 @@ func writeConf(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				values := []int{c.memory, c.gpuMemTotal}
+				gpuMemTotal := common.UnknownValue
+				if c.gpuMemCount > 0 {
+					gpuMemTotal = c.gpuMemTotal / c.gpuMemCount
+				}
+				values := []int{c.memory, gpuMemTotal}
 				for _, value := range values {
 					if err = common.PrintCSVPositiveNumberValue(configWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)

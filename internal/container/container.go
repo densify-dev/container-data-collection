@@ -132,7 +132,7 @@ type k8sObject struct {
 
 // container is used to hold information related to containers
 type container struct {
-	memory, gpuMemTotal,
+	memory, gpuMemTotal, gpuMemCount,
 	cpuLimit, cpuRequest,
 	memLimit, memRequest,
 	gpuLimit, gpuRequest,
@@ -390,6 +390,7 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 		obj.containers[containerName] = &container{
 			memory:      common.UnknownValue,
 			gpuMemTotal: common.UnknownValue,
+			gpuMemCount: common.UnknownValue,
 			cpuLimit:    common.UnknownValue,
 			cpuRequest:  common.UnknownValue,
 			memLimit:    common.UnknownValue,

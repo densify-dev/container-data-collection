@@ -202,9 +202,11 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			addToLabelMap(ss.Metric, c.labelMap, excludeNodeLabel)
 		case common.GpuMemoryTotal:
 			// add the value to the total
-			if c.gpuMemTotal == common.UnknownValue {
+			if c.gpuMemCount == common.UnknownValue {
+				c.gpuMemCount = 0
 				c.gpuMemTotal = 0
 			}
+			c.gpuMemCount++
 			c.gpuMemTotal += int(value)
 			// also get the GPU model name && sharing strategy
 			concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
