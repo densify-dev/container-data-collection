@@ -9,7 +9,7 @@ import (
 
 // globals
 //
-//go:generate sh -c "printf %s $(git describe --abbrev=0 --tags) > version.txt"
+//go:generate sh -c "git tag --sort=-creatordate | head -n 1 > version.txt"
 //go:embed version.txt
 var version string
 var Version = strings.TrimSpace(version)
