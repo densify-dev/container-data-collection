@@ -3,9 +3,10 @@ ARG BASE_IMAGE=alpine
 FROM golang:bookworm AS builder
 # Enable Docker BuildKit automatic platform ARGs
 ARG TARGETARCH
+ARG VERSION
 ADD . /github.com/densify-dev/container-data-collection
 WORKDIR /github.com/densify-dev/container-data-collection/cmd
-RUN go generate github.com/densify-dev/container-data-collection/internal/common
+RUN echo -n "v${VERSION}" > ../internal/common/version.txt
 RUN GOOS=linux GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -trimpath -gcflags=-trimpath="${GOPATH}" -asmflags=-trimpath="${GOPATH}" -ldflags="-w -s" -o ./dataCollection .
 
 FROM ${BASE_IMAGE}:latest
