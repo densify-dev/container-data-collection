@@ -2,13 +2,14 @@ package node
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	nnet "github.com/densify-dev/net-utils/network"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
-	"strings"
-	"sync"
 )
 
 type taint struct {

@@ -2,11 +2,12 @@ package nodegroup
 
 import (
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
-	"os"
-	"strings"
 )
 
 type nodeGroup struct {
@@ -453,22 +454,22 @@ func Metrics() {
 			common.Empty:               common.GpuUtilizationAvg,
 			node.GpuPercentQuerySuffix: common.GpuUtilizationGpusAvg,
 		}
-		for _, qw := range qws {
-			for q, wmh := range gwmhs {
-				query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
-				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-				getWorkload(wmh, query, ngl)
-			}
-			query = fmt.Sprintf(" 100 * avg(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"), qw.MetricField[0])
+		// All DCGM queries are transformed using label_replace to have the node label
+		qw := queryWrappersMap[node.HasNodeLabel]
+		for q, wmh := range gwmhs {
+			query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
 			query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-			getWorkload(common.GpuMemUtilizationAvg, query, ngl)
-
-			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
-			getWorkload(common.GpuMemUsedAvg, query, ngl)
-
-			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
-			getWorkload(common.GpuPowerUsageAvg, query, ngl)
+			getWorkload(wmh, query, ngl)
 		}
+		query = fmt.Sprintf(" 100 * avg(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"), qw.MetricField[0])
+		query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+		getWorkload(common.GpuMemUtilizationAvg, query, ngl)
+
+		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
+		getWorkload(common.GpuMemUsedAvg, query, ngl)
+
+		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
+		getWorkload(common.GpuPowerUsageAvg, query, ngl)
 	} else {
 		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 	}

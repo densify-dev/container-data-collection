@@ -4,12 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	cconf "github.com/densify-dev/container-config/config"
-	"github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
-	"github.com/prometheus/common/config"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/sigv4"
 	"net/http"
 	"regexp"
 	"sort"
@@ -17,13 +11,25 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	cconf "github.com/densify-dev/container-config/config"
+	"github.com/prometheus/client_golang/api"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/config"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/sigv4"
 )
 
 // CollectMetric is used to query Prometheus to get data for specific query and return the results to be processed
 func CollectMetric(callDepth int, query string, promRange *v1.Range) (crm ClusterResultMap, n int, err error) {
-	cle := getClusterLabelsEmbedder(query)
 	var qry string
-	if qry, err = cle.embedClusterLabels(query); err != nil {
+	if pqa := GetObservabilityPlatformQueryAdjuster(); pqa == nil {
+		qry = query
+	} else {
+		qry = pqa(query)
+	}
+	cle := getClusterLabelsEmbedder(qry)
+	if qry, err = cle.embedClusterLabels(qry); err != nil {
 		return
 	}
 	pac := getApiCall(promRange)
@@ -153,53 +159,13 @@ func failOnConnectionError(err error) {
 	})
 }
 
-type ObservabilityPlatform string
-
-const (
-	UnknownPlatform               ObservabilityPlatform = Empty
-	AWSManagedPrometheus          ObservabilityPlatform = "AWS Managed Prometheus"
-	AzureMonitorManagedPrometheus ObservabilityPlatform = "Azure Monitor Managed Prometheus"
-	GrafanaCloud                  ObservabilityPlatform = "Grafana Cloud"
-)
-
-const (
-	workspaceAMPPattern = "aps-workspaces"
-	fqdnAzMP            = "prometheus.monitor.azure.com"
-	fqdnGrafanaCloud    = "grafana.net"
-)
-
-var op ObservabilityPlatform
-var onceOp sync.Once
-
-func GetObservabilityPlatform() ObservabilityPlatform {
-	onceOp.Do(func() {
-		op = getObservabilityPlatform()
-	})
-	return op
-}
-
-func getObservabilityPlatform() ObservabilityPlatform {
-	host := strings.ToLower(Params.Prometheus.UrlConfig.Host)
-	if Params.Prometheus.SigV4Config != nil || strings.HasPrefix(host, workspaceAMPPattern) {
-		return AWSManagedPrometheus
-	}
-	if strings.HasSuffix(host, fqdnAzMP) {
-		return AzureMonitorManagedPrometheus
-	}
-	if strings.Contains(host, fqdnGrafanaCloud) && Params.Prometheus.UrlConfig.Password != Empty {
-		return GrafanaCloud
-	}
-	return UnknownPlatform
-}
-
 func buildInfoSupported() (bool, string) {
 	switch observabilityPlatform := GetObservabilityPlatform(); observabilityPlatform {
-	case AWSManagedPrometheus, AzureMonitorManagedPrometheus:
-		// AMP and AzMP don't support Buildinfo() (both return 404):
+	case AWSManagedPrometheus, AzureMonitorManagedPrometheus, GoogleManagedPrometheus:
+		// AMP, AzMP and GMP don't support Buildinfo() (all return 404):
 		// * https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-APIReference-Prometheus-Compatible-Apis.html
 		// * https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql#supported-apis
-		// In addition, AWS SigV4 requires request body to sign (and BuildInfo is a GET with nil body), see
-		// https://github.com/prometheus/common/issues/562
+		// * https://docs.cloud.google.com/stackdriver/docs/managed-prometheus/query-api-ui#http-api-details
 		return false, fmt.Sprintf(platformWorkspaces, observabilityPlatform)
 	default:
 		return true, Empty
@@ -237,6 +203,8 @@ func promApi(cluster string) (v1.API, error) {
 	// Bearer token can be used for a number of solutions supporting Prometheus-API.
 	// One of these is Azure Monitor managed Prometheus - see:
 	// https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-api-promql
+	// Another one is Google Managed Prometheus - see:
+	// https://docs.cloud.google.com/stackdriver/docs/managed-prometheus/query-api-ui#api-prometheus
 	// Another one is Openshift Monitoring Stack - see:
 	// https://docs.openshift.com/container-platform/4.15/monitoring/configuring-the-monitoring-stack.html
 	// The bearer token can be passed as a string or as a path to a file.
@@ -446,6 +414,10 @@ type clusterExporter struct {
 	UpScrapeInterval     time.Duration // exported for fmt pretty-printing
 }
 
+func (e *exporter) getPrefix() string {
+	return e.metricsPrefix + Underscore
+}
+
 func (e *exporter) logAllClusterMetrics(cluster string, result model.Matrix) {
 	s := make([]string, 0, result.Len())
 	for _, ss := range result {
@@ -499,18 +471,18 @@ func setScrapeInterval(target *time.Duration, ss *model.SampleStream) {
 
 var exporters = makeExporters()
 
-func makeExporters() []*exporter {
-	exps := make([]*exporter, 0, 5)
-	addExporter(&exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false)
-	addExporter(&exps, nodeExporter, "node_cpu_seconds_total", nil, false)
-	addExporter(&exps, ksm, "kube_pod_info", nil, false)
-	addExporter(&exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
-	addExporter(&exps, dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
+func makeExporters() map[string]*exporter {
+	exps := make(map[string]*exporter, 5)
+	addExporter(exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false)
+	addExporter(exps, nodeExporter, "node_cpu_seconds_total", nil, false)
+	addExporter(exps, ksm, "kube_pod_info", nil, false)
+	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
+	addExporter(exps, dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
 	return exps
 }
 
-func addExporter(exps *[]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool) {
-	*exps = append(*exps, &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics})
+func addExporter(exps map[string]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool) {
+	exps[name] = &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics}
 }
 
 var clusterExporters = make(map[string]map[string]*clusterExporter)

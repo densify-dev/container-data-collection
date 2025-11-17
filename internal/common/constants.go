@@ -1,9 +1,10 @@
 package common
 
 import (
+	"strings"
+
 	cconf "github.com/densify-dev/container-config/config"
 	"github.com/iancoleman/strcase"
-	"strings"
 )
 
 // EntityKinds

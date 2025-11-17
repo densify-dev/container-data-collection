@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+type QueryAdjuster func(string) string
+
 const (
 	labelsPlaceholderBraces = leftBrace + labelsPlaceholder + rightBrace
 	commaLabelsPlaceholder  = Comma + labelsPlaceholder
