@@ -41,7 +41,7 @@ Image tags are derived from the git tags, but the leading 'v' is stripped off as
 
 1. **Docker Hub Account**: You need a Docker Hub account with push permissions to the `densify/container-optimization-data-forwarder` repository.
 
-2. **GitHub Secrets**: Add the following secrets to your GitHub repository:
+2. **GitHub Secrets**: Add the following secrets to your GitHub repository (or to the organization and make these visible to the repository):
    - `DOCKER_USERNAME`: Your Docker Hub username
    - `DOCKER_PASSWORD`: Your Docker Hub password or access token
 
@@ -52,12 +52,23 @@ Image tags are derived from the git tags, but the leading 'v' is stripped off as
 
 ### Adding Secrets
 
+#### At Repository Level
+
 1. Go to your GitHub repository
-2. Navigate to Settings → Secrets and variables → Actions
+2. Navigate to Settings → Security / Secrets and variables → Actions
 3. Click "New repository secret"
 4. Add the following secrets:
    - Name: `DOCKER_USERNAME`, Value: Your Docker Hub username
    - Name: `DOCKER_PASSWORD`, Value: Your Docker Hub password or access token
+
+#### Or: at Organization Level
+
+1. Go to your GitHub organization
+2. Navigate to Settings → Security / Secrets and variables → Actions
+3. Click "New organization secret"
+4. Add the following secrets:
+   - Name: `DOCKER_USERNAME`, Value: Your Docker Hub username, Visibility: selected repositories (select which) 
+   - Name: `DOCKER_PASSWORD`, Value: Your Docker Hub password or access token, Visibility: selected repositories (select which)
 
 ## Usage
 
