@@ -103,11 +103,12 @@ if [ "${baseImageArg}" == "ubi10" ]; then
     : "${PYXIS_API_TOKEN:?Variable not set. Export PYXIS_API_TOKEN}"
     : "${RH_COMPONENT_ID:?Variable not set. Export RH_COMPONENT_ID}"
     baseImage="registry.access.redhat.com/ubi10/ubi-minimal"
+    image="container-optimization-data-forwarder"
     registryRepo="densify"
 else
     baseImage="${baseImageArg}"
+    image="container-data-collection-forwarder"
 fi
-image="container-data-collection-forwarder"
 
 if [ -n ${registryRepo} ]; then
     registry=$(echo ${registryRepo} | cut -d'/' -f1)
