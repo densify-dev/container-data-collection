@@ -19,12 +19,12 @@ ARG TARGETARCH
 
 ### Required OpenShift Labels
 LABEL name="Container-Optimization-Data-Forwarder" \
-      vendor="Densify" \
-      maintainer="support@densify.com" \
+      vendor="Kubex" \
+      maintainer="support@kubex.ai" \
       version="${VERSION}" \
       release="${RELEASE}" \
-      summary="Densify container data collection" \
-      description="Collects data from Prometheus and sends to Densify server for analysis"
+      summary="Kubex container data collection" \
+      description="Collects data from Prometheus and sends to Kubex server for analysis"
 
 # BASE_IMAGE specifics - add non-root user and remove the ability to install packages
 RUN case ${BASE_IMG} in \
@@ -37,6 +37,7 @@ RUN case ${BASE_IMG} in \
         groupadd -g 3000 densify && \
         adduser -d /home/densify -m -s /bin/bash -u 3000 -g densify densify && \
         microdnf remove -y shadow-utils && \
+        microdnf clean all && \
         rm -f /bin/microdnf ;; \
     debian* ) \
         mkdir -p /home/densify && \

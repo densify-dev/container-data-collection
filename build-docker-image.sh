@@ -6,7 +6,7 @@ usage() {
     echo "" >&2
     echo "usage: ${exec} [ -b baseImage ] [ -t imageTag ] [ -a arch ] [ -p ] [ -r ] [ -h ]" >&2
     echo "" >&2
-    echo "  b - alpine, ubi9, debian [ default is alpine ] " >&2
+    echo "  b - alpine, ubi10, debian [ default is alpine ] " >&2
     echo "  t - required image tag [ mandatory ] " >&2
     echo "  a - target architecture: amd64, arm64, or multi [ default is current platform ] " >&2
     echo "  p - tag & push image to a registry repo [ mandatory for multi-arch ] " >&2
@@ -61,14 +61,15 @@ setupBuildx() {
     if [ "${insecure}" = true ]; then
         createArgs="${createArgs} --buildkitd-config ${buildkitConfig}"
     fi
+    createArgs="${createArgs} --use"
     # Create and use a new builder instance if it doesn't exist
     if ! docker buildx inspect multiarch-builder >/dev/null 2>&1; then
         echo "Creating multiarch-builder instance..."
         docker buildx create ${createArgs}
+    else
+        echo "Using multiarch-builder instance..."
+        docker buildx use multiarch-builder
     fi
-    
-    echo "Using multiarch-builder instance..."
-    docker buildx use multiarch-builder
 }
 
 baseImageArg="alpine"
@@ -94,17 +95,29 @@ done
 rm -rf ./build
 mkdir ./build
 
-if [[ ${insecure} == "true" && -n ${registryRepo} ]]; then
-    registry=$(echo ${registryRepo} | cut -d'/' -f1 )
-    cat << EOF > ${buildkitConfig}
+if [ -z "${tag}" ]; then
+    usage 1
+fi
+
+if [ "${baseImageArg}" == "ubi10" ]; then
+    : "${PYXIS_API_TOKEN:?Variable not set. Export PYXIS_API_TOKEN}"
+    : "${RH_COMPONENT_ID:?Variable not set. Export RH_COMPONENT_ID}"
+    baseImage="registry.access.redhat.com/ubi10/ubi-minimal"
+    registryRepo="densify"
+else
+    baseImage="${baseImageArg}"
+fi
+image="container-data-collection-forwarder"
+
+if [ -n ${registryRepo} ]; then
+    registry=$(echo ${registryRepo} | cut -d'/' -f1)
+    if [ ${insecure} == "true" ]; then
+        cat << EOF > ${buildkitConfig}
 [registry."${registry}"]
   http = true
   insecure = true
 EOF
-fi
-
-if [ -z "${tag}" ]; then
-    usage 1
+    fi
 fi
 
 # Validate architecture argument
@@ -141,15 +154,6 @@ else
     usesBuildx=false
 fi
 
-# full name of ubi9 image
-if [ "${baseImageArg}" == "ubi9" ]; then
-    baseImage="redhat/ubi9-minimal"
-else
-    baseImage="${baseImageArg}"
-fi
-
-image="container-data-collection-forwarder"
-
 release=$(gitCommitHash)
 
 # Go build as cross-compiling under docker buildx is notoriously slow
@@ -169,6 +173,7 @@ if [ "${usesBuildx}" = true ]; then
     setupBuildx
     # Use buildx for multi-platform builds
     buildArgs="--platform ${platforms}"
+    buildArgs="${buildArgs} --provenance=false"
     buildArgs="${buildArgs} --build-arg BASE_IMAGE=${baseImage}"
     buildArgs="${buildArgs} --build-arg VERSION=${tag}"
     buildArgs="${buildArgs} --build-arg RELEASE=${release}"
@@ -181,11 +186,40 @@ if [ "${usesBuildx}" = true ]; then
         buildArgs="${buildArgs} -t ${image}:${baseImageArg}-${tag} --load"
     fi
     DOCKER_BUILDKIT=1 docker buildx build ${buildArgs} .
+    if [ $? -ne 0 ]; then
+        echo "❌ Build/Push failed"
+        exit 1
+    fi
 else
     # Use regular docker build for single platform
     docker build --progress=plain -t ${image}:${baseImageArg}-${tag} -f Dockerfile-local --build-arg BASE_IMAGE=${baseImage} --build-arg VERSION=${tag} --build-arg RELEASE=${release} .
+    if [ $? -ne 0 ]; then
+        echo "❌ Push failed"
+        exit 1
+    fi
     # Traditional push logic for single platform builds
     if [ -n "${registryRepo}" ]; then
         tagAndPush ${image}:${baseImageArg}-${tag} ${registryRepo}/${image}:${baseImageArg}-${tag}
+    fi
+    if [ $? -ne 0 ]; then
+        echo "❌ Tag/Push failed"
+        exit 1
+    fi
+fi
+
+if [ "${baseImageArg}" == "ubi10" ]; then
+    echo "--- 🕵️ Running Red Hat Preflight Certification ---"
+    # Preflight automatically looks for credentials in ~/.docker/config.json
+    # so we don't need to specify --docker-config explicitly unless it's non-standard.
+    preflight check container "${registryRepo}/${image}:${baseImageArg}-${tag}" \
+        --submit \
+        --pyxis-api-token="${PYXIS_API_TOKEN}" \
+        --certification-component-id="${RH_COMPONENT_ID}"
+
+    if [ $? -eq 0 ]; then
+        echo "✅ Success! Results submitted to Red Hat."
+    else
+        echo "❌ Preflight checks failed."
+        exit 1
     fi
 fi

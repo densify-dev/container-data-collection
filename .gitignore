@@ -1,3 +1,7 @@
 .idea
 internal/common/version.txt
 build
+docs/*metrics*.txt
+docs/*metrics*.yaml
+artifacts
+preflight.log

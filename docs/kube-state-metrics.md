@@ -55,6 +55,7 @@
 | kube_pod_info                                                    | Pod information                      | :white_check_mark: | :white_check_mark: |                    |                    |                    |         |
 | kube_pod_labels                                                  | Pod labels                           | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_pod_owner                                                   | Pod owner                            | :white_check_mark: |                    |                    |                    |                    |         |
+| kube_pod_status_phase                                            | Pod current phase                    | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |         |
 | kube_pod_status_qos_class                                        | Pod Qos Class                        | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_replicaset_created                                          | ReplicaSet creation time             | :white_check_mark: |                    |                    |                    |                    |         |
 | kube_replicaset_labels                                           | ReplicaSet labels                    | :white_check_mark: |                    |                    |                    |                    |         |

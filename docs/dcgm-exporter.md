@@ -8,6 +8,9 @@
 | DCGM_FI_DEV_FB_FREE                 | Framebuffer memory used (MiB) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | DCGM_FI_DEV_GPU_UTIL                | GPU utilization (%) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 | DCGM_FI_DEV_POWER_USAGE             | GPU power draw (W) | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
+| DCGM_FI_PROF_DRAM_ACTIVE            | Ratio of cycles the device memory interface is active sending or receiving data | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
+| DCGM_FI_PROF_GR_ENGINE_ACTIVE       | Ratio of time the graphics engine is active | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
+| DCGM_FI_PROF_PIPE_TENSOR_ACTIVE     | Ratio of cycles the tensor (HMMA) pipe is active | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |        |         |
 
 [^1]: Container Metrics
 [^2]: Node Metrics
