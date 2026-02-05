@@ -121,6 +121,8 @@ var (
 	PodCount                 = NewWorkloadMetricHolder(Pod, Count)
 	OomKillEvents            = NewWorkloadMetricHolder(Oom, Kill, Events)
 	CpuThrottlingEvents      = NewWorkloadMetricHolder(Cpu, Throttling, Events)
+	EphemeralStorageRequests = NewWorkloadMetricHolder(Ephemeral, Storage, Requests)
+	EphemeralStorageLimits   = NewWorkloadMetricHolder(Ephemeral, Storage, Limits)
 )
 
 const (
