@@ -136,7 +136,8 @@ type container struct {
 	cpuLimit, cpuRequest,
 	memLimit, memRequest,
 	gpuLimit, gpuRequest,
-	restarts int
+	restarts,
+	ephemeralStorageLimit, ephemeralStorageRequest int
 	powerState                   powerState
 	name                         string
 	gpuModel, gpuSharingStrategy string
@@ -388,18 +389,20 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			ns.objects[ownerKey] = obj
 		}
 		obj.containers[containerName] = &container{
-			memory:      common.UnknownValue,
-			gpuMemTotal: common.UnknownValue,
-			gpuMemCount: common.UnknownValue,
-			cpuLimit:    common.UnknownValue,
-			cpuRequest:  common.UnknownValue,
-			memLimit:    common.UnknownValue,
-			memRequest:  common.UnknownValue,
-			gpuLimit:    common.UnknownValue,
-			gpuRequest:  common.UnknownValue,
-			powerState:  common.UnknownValue,
-			name:        containerName,
-			labelMap:    make(map[string]string),
+			memory:                  common.UnknownValue,
+			gpuMemTotal:             common.UnknownValue,
+			gpuMemCount:             common.UnknownValue,
+			cpuLimit:                common.UnknownValue,
+			cpuRequest:              common.UnknownValue,
+			memLimit:                common.UnknownValue,
+			memRequest:              common.UnknownValue,
+			gpuLimit:                common.UnknownValue,
+			gpuRequest:              common.UnknownValue,
+			powerState:              common.UnknownValue,
+			ephemeralStorageLimit:   common.UnknownValue,
+			ephemeralStorageRequest: common.UnknownValue,
+			name:                    containerName,
+			labelMap:                make(map[string]string),
 		}
 	}
 }
