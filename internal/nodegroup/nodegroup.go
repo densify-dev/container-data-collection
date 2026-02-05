@@ -200,18 +200,6 @@ func getQueryToMetricField(query string, nodeGroupLabelNames []model.LabelName) 
 	return m
 }
 
-var nodeGroupLabels = make(map[model.LabelName]bool)
-var ngl []model.LabelName
-
-func detectNameLabel(_ string, result model.Matrix) {
-	// ignoring the cluster, we only collect the label names
-	for _, ss := range result {
-		for labelName := range ss.Metric {
-			nodeGroupLabels[labelName] = true
-		}
-	}
-}
-
 func (ngh *nodeGroupHolder) createNodeGroup(cluster string, result model.Matrix) {
 	var f bool
 	if _, f = nodeGroups[cluster]; !f {
@@ -331,16 +319,6 @@ func Metrics() {
 	var err error
 	range5Min := common.TimeRange()
 
-	query = `avg(kube_node_labels{}) by (` + common.ToPrometheusLabelNameList(common.Params.Collection.NodeGroupList) + `)`
-	// even if there are no labels, we'll get one stream with value 1 and empty label set,
-	// so need to check for length of nodeGroupLabels i.s.o. the number returned by CollectAndProcessMetric
-	if _, err = common.CollectAndProcessMetric(query, range5Min, detectNameLabel); err != nil || len(nodeGroupLabels) == 0 {
-		// error already handled
-		return
-	}
-	// we need node group labels in many places as a slice
-	ngl = common.KeySet(nodeGroupLabels)
-
 	query = `sum(kube_pod_container_resource_limits{}) by (node, resource)`
 	if _, err = common.CollectAndProcessMetric(query, range5Min, incUnifiedLimits); err != nil {
 		// error already handled
@@ -353,124 +331,160 @@ func Metrics() {
 		return
 	}
 
-	var nodeGroupSuffix string
+	query = `avg(kube_node_labels{}) by (` + common.ToPrometheusLabelNameList(common.Params.Collection.NodeGroupList) + `)`
+	if _, err = common.CollectAndProcessMetric(query, range5Min, detectNameLabel); err != nil {
+		// error already handled
+		return
+	}
+	// even if there are no labels, we'll get one stream with value 1 and empty label set,
+	// so need to check for length of clusterFeatures i.s.o. the number returned by CollectAndProcessMetric
+	if len(clusterFeatures) < common.NumClusters() {
+		// TODO: check for openshift
+	}
 
-	for ng := range nodeGroupLabels {
-		ngh := &nodeGroupHolder{nodeGroupLabel: ng}
-		ngStr := string(ng)
-		query = `kube_node_labels{` + ngStr + `=~".+"}`
-		if _, err = common.CollectAndProcessMetric(query, range5Min, ngh.createNodeGroup); err != nil {
-			// error already handled
-			continue
-		}
-		ngmh := &nodeGroupMetricHolder{nodeGroupHolder: ngh}
-		nodeGroupSuffix = ` * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `)`
-		for _, qualifier := range qualifiers {
-			for _, f := range common.FoundIndicatorCounter(foundUnified, qualifier) {
-				for res, coreQuery := range resourceCoreQueries[qualifier][f] {
-					query = fmt.Sprintf("sum(sum(%s%s) by (node)%s", coreQuery, operands[res], nodeGroupSuffix)
-					ngmh.metric = common.DromedaryCase(res, qualifier)
-					_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
+	if len(clusterFeatures) < common.NumClusters() {
+		// TODO: check for role
+	}
+
+	if len(clusterFeatures) < common.NumClusters() {
+		// TODO: set default
+	}
+
+	// we need node group labels in many places as a slice
+	ngl = common.KeySet(nodeGroupLabels)
+
+	common.RegisterClusterQueryExclusion(common.ExcComment, common.ExcludeQueryByClusterComment)
+
+	ccqas := common.GetClusterCommentQueryAdapters()
+
+	// TODO: change _ to ccqa and use it with exery query
+	for cluster, _ := range ccqas {
+		//TODO: change _ to cf and use cf to get from it the labels and subqueries to use i.s.o. consts and
+		// global vars
+		_ = clusterFeatures[cluster]
+		//qfs := cf.NodeGroupQueryFeatures()
+		//fmt.Printf("%v - %v\n", ccqa, qfs)
+		// TODO: NOW RUN on all query features and modify all queries, don't forget to use ccqa to add comment!
+		var nodeGroupSuffix string
+
+		for ng := range nodeGroupLabels {
+			ngh := &nodeGroupHolder{nodeGroupLabel: ng}
+			ngStr := string(ng)
+			query = `kube_node_labels{` + ngStr + `=~".+"}`
+			if _, err = common.CollectAndProcessMetric(query, range5Min, ngh.createNodeGroup); err != nil {
+				// error already handled
+				continue
+			}
+			ngmh := &nodeGroupMetricHolder{nodeGroupHolder: ngh}
+			nodeGroupSuffix = ` * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `)`
+			for _, qualifier := range qualifiers {
+				for _, f := range common.FoundIndicatorCounter(foundUnified, qualifier) {
+					for res, coreQuery := range resourceCoreQueries[qualifier][f] {
+						query = fmt.Sprintf("sum(sum(%s%s) by (node)%s", coreQuery, operands[res], nodeGroupSuffix)
+						ngmh.metric = common.DromedaryCase(res, qualifier)
+						_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
+					}
 				}
 			}
+			query = `sum(kube_node_status_capacity{} * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `,resource)`
+			ngmh.metric = common.Capacity
+			var n int
+			if n, err = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric); err != nil || n < common.NumClusters() {
+				query = `sum(kube_node_status_capacity_cpu_cores{}` + nodeGroupSuffix
+				ngmh.metric = common.CpuCapacity
+				_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
+				query = `sum(kube_node_status_capacity_memory_bytes{}` + operands[common.Memory] + nodeGroupSuffix
+				ngmh.metric = common.MemCapacity
+				_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
+			}
 		}
-		query = `sum(kube_node_status_capacity{} * on (node) group_left (` + ngStr + `) kube_node_labels{` + ngStr + `=~".+"}) by (` + ngStr + `,resource)`
-		ngmh.metric = common.Capacity
-		var n int
-		if n, err = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric); err != nil || n < common.NumClusters() {
-			query = `sum(kube_node_status_capacity_cpu_cores{}` + nodeGroupSuffix
-			ngmh.metric = common.CpuCapacity
-			_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
-			query = `sum(kube_node_status_capacity_memory_bytes{}` + operands[common.Memory] + nodeGroupSuffix
-			ngmh.metric = common.MemCapacity
-			_, _ = common.CollectAndProcessMetric(query, range5Min, ngmh.getNodeGroupMetric)
+		writeAttributes()
+		writeConfig()
+
+		qmf := getQueryToMetricField(workloadNodeGroupSuffixNoBracket, ngl)
+		common.GetConditionalMetricsWorkload(foundUnified, common.Request, qmf, common.NodeGroupEntityKind, common.Metric)
+
+		query = `sum(kube_node_labels{` + nodeGroupLabelPlaceholder + `=~".+"}) by (` + nodeGroupLabelPlaceholder + `)`
+		getWorkload(common.CurrentSize, query, ngl)
+
+		qws := node.GetQueryWrappers(&queryWrappers, queryWrappersMap)
+
+		if node.HasNodeExporter(range5Min) {
+			for _, qw := range qws {
+				query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
+				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+				getWorkload(common.CpuUtilization, query, ngl)
+
+				query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
+				getWorkload(common.MemoryBytes, query, ngl)
+
+				query = qw.Query.Wrap(fmt.Sprintf("(%s)", node.GetMemActualQuery()))
+				getWorkload(common.MemoryActualWorkload, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.DiskReadBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.DiskWriteBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.DiskTotalBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.DiskReadOps, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.DiskWriteOps, query, ngl)
+
+				query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
+				getWorkload(common.DiskTotalOps, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetReceivedBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetSentBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetTotalBytes, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetReceivedPackets, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetSentPackets, query, ngl)
+
+				query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
+				getWorkload(common.NetTotalPackets, query, ngl)
+			}
+		} else {
+			common.LogAll(1, common.Error, "entity=%s prometheus node exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 		}
-	}
-	writeAttributes()
-	writeConfig()
 
-	qmf := getQueryToMetricField(workloadNodeGroupSuffixNoBracket, ngl)
-	common.GetConditionalMetricsWorkload(foundUnified, common.Request, qmf, common.NodeGroupEntityKind, common.Metric)
-
-	query = `sum(kube_node_labels{` + nodeGroupLabelPlaceholder + `=~".+"}) by (` + nodeGroupLabelPlaceholder + `)`
-	getWorkload(common.CurrentSize, query, ngl)
-
-	qws := node.GetQueryWrappers(&queryWrappers, queryWrappersMap)
-
-	if node.HasNodeExporter(range5Min) {
-		for _, qw := range qws {
-			query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
+		if node.HasDcgmExporter(range5Min) {
+			gwmhs := map[string]*common.WorkloadMetricHolder{
+				common.Empty:               common.GpuUtilizationAvg,
+				node.GpuPercentQuerySuffix: common.GpuUtilizationGpusAvg,
+			}
+			// All DCGM queries are transformed using label_replace to have the node label
+			qw := queryWrappersMap[node.HasNodeLabel]
+			for q, wmh := range gwmhs {
+				query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
+				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
+				getWorkload(wmh, query, ngl)
+			}
+			query = fmt.Sprintf(" 100 * avg(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"), qw.MetricField[0])
 			query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-			getWorkload(common.CpuUtilization, query, ngl)
+			getWorkload(common.GpuMemUtilizationAvg, query, ngl)
 
-			query = qw.Query.Wrap(`(node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{})`)
-			getWorkload(common.MemoryBytes, query, ngl)
+			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
+			getWorkload(common.GpuMemUsedAvg, query, ngl)
 
-			query = qw.Query.Wrap(fmt.Sprintf("(%s)", node.GetMemActualQuery()))
-			getWorkload(common.MemoryActualWorkload, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.DiskReadBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.DiskWriteBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_disk_read_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_written_bytes_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.DiskTotalBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.DiskReadOps, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.DiskWriteOps, query, ngl)
-
-			query = qw.SumQuery.Wrap(`(irate(node_disk_reads_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_disk_writes_completed_total{device!~"dm-.*"}[` + common.Params.Collection.SampleRateSt + `m]))`)
-			getWorkload(common.DiskTotalOps, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetReceivedBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetSentBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_transmit_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_bytes_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetTotalBytes, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetReceivedPackets, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetSentPackets, query, ngl)
-
-			query = qw.SumQuery.Wrap(`irate(node_network_transmit_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m]) + irate(node_network_receive_packets_total{device!~"veth.*|docker.*|cilium.*|lxc.*"}[` + common.Params.Collection.SampleRateSt + `m])`)
-			getWorkload(common.NetTotalPackets, query, ngl)
+			query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
+			getWorkload(common.GpuPowerUsageAvg, query, ngl)
+		} else {
+			common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 		}
-	} else {
-		common.LogAll(1, common.Error, "entity=%s prometheus node exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 	}
-
-	if node.HasDcgmExporter(range5Min) {
-		gwmhs := map[string]*common.WorkloadMetricHolder{
-			common.Empty:               common.GpuUtilizationAvg,
-			node.GpuPercentQuerySuffix: common.GpuUtilizationGpusAvg,
-		}
-		// All DCGM queries are transformed using label_replace to have the node label
-		qw := queryWrappersMap[node.HasNodeLabel]
-		for q, wmh := range gwmhs {
-			query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
-			query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-			getWorkload(wmh, query, ngl)
-		}
-		query = fmt.Sprintf(" 100 * avg(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})"), qw.MetricField[0])
-		query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
-		getWorkload(common.GpuMemUtilizationAvg, query, ngl)
-
-		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{}"))
-		getWorkload(common.GpuMemUsedAvg, query, ngl)
-
-		query = qw.SumQuery.Wrap(common.DcgmExporterLabelReplace("DCGM_FI_DEV_POWER_USAGE{}"))
-		getWorkload(common.GpuPowerUsageAvg, query, ngl)
-	} else {
-		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeGroupEntityKind)
-	}
+	common.UnregisterClusterQueryExclusion(common.ExcComment)
 }

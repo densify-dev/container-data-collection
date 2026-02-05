@@ -2,13 +2,14 @@ package container
 
 import (
 	"fmt"
+	"math"
+	"strings"
+	"time"
+
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
-	"math"
-	"strings"
-	"time"
 )
 
 const (
@@ -16,6 +17,8 @@ const (
 	ksmLastTerminatedTimestamp        = `kube_pod_container_status_last_terminated_timestamp`
 	ksmLastTerminatedExitCode         = `kube_pod_container_status_last_terminated_exitcode`
 	ksmRestartsTotal                  = `kube_pod_container_status_restarts_total`
+	noHiddenOomKills                  = "no-hidden-oomkills"
+	noLastTerminated                  = "no-last-terminated"
 	hiddenOomKillFraction             = 0.1371
 	majorCgroupV2Grouping      uint64 = 1
 	minorCgroupV2Grouping      uint64 = 28
@@ -106,8 +109,8 @@ func (peep *ProcessExitEventProvider) CalculateRange(historyInterval int) *v1.Ra
 
 func Events() {
 	common.ResolveMetrics(map[string]common.ResolveMetricFunc{ksmLastTerminatedTimestamp: incrementIndicator})
-	common.RegisterClusterQueryExclusion(excludeHiddenOomKills)
-	common.RegisterClusterQueryExclusion(excludeKsmLastTerminated)
+	common.RegisterClusterQueryExclusion(noHiddenOomKills, excludeHiddenOomKills)
+	common.RegisterClusterQueryExclusion(noLastTerminated, excludeKsmLastTerminated)
 	multipliers := map[bool]string{true: common.Asterisk + ksmLastTerminatedTimestamp + common.Braces, false: common.Empty}
 	eventQueries := make(map[string]int, 3)
 	for _, f := range common.FoundIndicatorCounter(indicators, ksmLastTerminatedTimestamp) {

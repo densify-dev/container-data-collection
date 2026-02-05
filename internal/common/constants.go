@@ -115,6 +115,8 @@ const (
 	Asterisk    = "*"
 	Hostname    = "Hostname"
 	None        = "none"
+	Role        = "role"
+	ExcComment  = "exclude-by-cluster-comment"
 )
 
 // owner kind labels
@@ -289,4 +291,31 @@ func dromedaryCase(s string) string {
 
 func snakeCase(s string) string {
 	return strcase.ToSnake(s)
+}
+
+type Bracket int
+
+const (
+	Parenthesis Bracket = iota
+	SquareBracket
+	Brace
+)
+
+func Wrap(s string, bracket Bracket) string {
+	var left, right string
+	switch bracket {
+	case Parenthesis:
+		left = leftBracket
+		right = rightBracket
+	case SquareBracket:
+		left = leftSquareBracket
+		right = rightSquareBracket
+	case Brace:
+		left = leftBrace
+		right = rightBrace
+	default:
+		left = Empty
+		right = Empty
+	}
+	return left + s + right
 }

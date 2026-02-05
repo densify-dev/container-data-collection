@@ -2,11 +2,14 @@ package node
 
 import (
 	"fmt"
+
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/prometheus/common/model"
 )
 
 var indicators = make(map[string]int)
+
+var ClusterNodeRoles = make(map[string]map[model.LabelValue]bool)
 
 func getNode(cluster string, ss *model.SampleStream, nodeLabel model.LabelName) (n *node, f bool) {
 	var nodeLabelValue model.LabelValue
@@ -175,6 +178,15 @@ func getNodeMetricString(cluster string, result model.Matrix) {
 				i = 1
 			}
 			srcMaps[i][k] = v
+			// record the role as an applicable role for the cluster (required for nodegroups)
+			if key == common.Role {
+				var nodeRoles map[model.LabelValue]bool
+				if nodeRoles, ok = ClusterNodeRoles[cluster]; !ok {
+					nodeRoles = make(map[model.LabelValue]bool)
+					ClusterNodeRoles[cluster] = nodeRoles
+				}
+				nodeRoles[value] = true
+			}
 		}
 		applyGpuLabels(cluster, n, srcMaps[1])
 		for i := 0; i < l; i++ {

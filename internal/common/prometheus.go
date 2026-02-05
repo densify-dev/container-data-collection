@@ -562,11 +562,15 @@ func getExporterPrefix(metricName string) string {
 
 type ClusterQueryExclusion func(cluster string, query string) bool
 
-func RegisterClusterQueryExclusion(ce ClusterQueryExclusion) {
-	clusterQueryExclusions = append(clusterQueryExclusions, ce)
+func RegisterClusterQueryExclusion(name string, ce ClusterQueryExclusion) {
+	clusterQueryExclusions[name] = ce
 }
 
-var clusterQueryExclusions []ClusterQueryExclusion
+func UnregisterClusterQueryExclusion(name string) {
+	delete(clusterQueryExclusions, name)
+}
+
+var clusterQueryExclusions = make(map[string]ClusterQueryExclusion)
 
 func excludeQueryForCluster(cluster string, query string) bool {
 	for _, ce := range clusterQueryExclusions {

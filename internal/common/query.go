@@ -10,6 +10,7 @@ type QueryAdjuster func(string) string
 const (
 	labelsPlaceholderBraces = leftBrace + labelsPlaceholder + rightBrace
 	commaLabelsPlaceholder  = Comma + labelsPlaceholder
+	ClusterCommentFmt       = " # " + ClusterFormat
 )
 
 type clusterLabelsEmbedder interface {
@@ -158,32 +159,6 @@ func generateOrOrigin(s string, wg WrapperGenerator) string {
 	}
 }
 
-type LabelReplaceCondition int
-
-const (
-	HasValue LabelReplaceCondition = iota
-	Always
-)
-
-const (
-	hasValueStr = ".+"
-	alwaysStr   = ".*"
-)
-
-func (lrc LabelReplaceCondition) String() (s string) {
-	switch lrc {
-	case HasValue:
-		s = hasValueStr
-	case Always:
-		s = alwaysStr
-	}
-	return
-}
-
-func LabelReplace(query, dstLabel, srcLabel string, lrc LabelReplaceCondition) string {
-	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "(%s)")`, query, dstLabel, srcLabel, lrc.String())
-}
-
 func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
 }
@@ -204,4 +179,22 @@ var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelRe
 func DcgmPercentQuerySuffix(metric string, onWhat ...string) string {
 	what := strings.Join(onWhat, Comma)
 	return fmt.Sprintf(` * on (%s) %s{%s="%s"} / 100`, what, metric, Resource, NvidiaGpuResource)
+}
+
+var clusterCommentQueryAdjusters map[string]QueryAdjuster
+
+func GetClusterCommentQueryAdapters() map[string]QueryAdjuster {
+	if clusterCommentQueryAdjusters == nil {
+		clusterCommentQueryAdjusters = make(map[string]QueryAdjuster, len(ClusterNames))
+	}
+	for _, cluster := range ClusterNames {
+		clusterCommentQueryAdjusters[cluster] = func(query string) string {
+			return query + fmt.Sprintf(ClusterCommentFmt, cluster)
+		}
+	}
+	return clusterCommentQueryAdjusters
+}
+
+func ExcludeQueryByClusterComment(cluster string, query string) bool {
+	return !strings.HasSuffix(query, fmt.Sprintf(ClusterCommentFmt, cluster))
 }
