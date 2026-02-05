@@ -339,7 +339,9 @@ func Metrics() {
 	// even if there are no labels, we'll get one stream with value 1 and empty label set,
 	// so need to check for length of clusterFeatures i.s.o. the number returned by CollectAndProcessMetric
 	if len(clusterFeatures) < common.NumClusters() {
-		// TODO: check for openshift
+		if err = determineOpenshiftFeatures(range5Min); err != nil {
+			common.LogErrorWithLevel(1, common.Error, err, "entity=%s", common.NodeGroupEntityKind)
+		}
 	}
 
 	if len(clusterFeatures) < common.NumClusters() {
