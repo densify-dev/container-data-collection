@@ -136,7 +136,8 @@ type container struct {
 	cpuLimit, cpuRequest,
 	memLimit, memRequest,
 	gpuLimit, gpuRequest,
-	restarts int
+	restarts,
+	ephemeralStorageLimit, ephemeralStorageRequest int
 	powerState                   powerState
 	name                         string
 	gpuModel, gpuSharingStrategy string
@@ -388,18 +389,20 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			ns.objects[ownerKey] = obj
 		}
 		obj.containers[containerName] = &container{
-			memory:      common.UnknownValue,
-			gpuMemTotal: common.UnknownValue,
-			gpuMemCount: common.UnknownValue,
-			cpuLimit:    common.UnknownValue,
-			cpuRequest:  common.UnknownValue,
-			memLimit:    common.UnknownValue,
-			memRequest:  common.UnknownValue,
-			gpuLimit:    common.UnknownValue,
-			gpuRequest:  common.UnknownValue,
-			powerState:  common.UnknownValue,
-			name:        containerName,
-			labelMap:    make(map[string]string),
+			memory:                  common.UnknownValue,
+			gpuMemTotal:             common.UnknownValue,
+			gpuMemCount:             common.UnknownValue,
+			cpuLimit:                common.UnknownValue,
+			cpuRequest:              common.UnknownValue,
+			memLimit:                common.UnknownValue,
+			memRequest:              common.UnknownValue,
+			gpuLimit:                common.UnknownValue,
+			gpuRequest:              common.UnknownValue,
+			powerState:              common.UnknownValue,
+			ephemeralStorageLimit:   common.UnknownValue,
+			ephemeralStorageRequest: common.UnknownValue,
+			name:                    containerName,
+			labelMap:                make(map[string]string),
 		}
 	}
 }
@@ -458,7 +461,7 @@ func Metrics() {
 
 	// container metrics
 	common.DebugLogObjectMemStats(common.Container)
-	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests)
+	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
 
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`

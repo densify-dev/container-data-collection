@@ -115,6 +115,8 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			case model.LabelValue(common.NvidiaGpuResource):
 				setValue(&n.gpuLimit, value)
 				common.WriteWorkload(nwp, nodeWorkloadWriters, common.GpuLimits, ss, nil)
+			case model.LabelValue(common.EphemeralStorage):
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.EphemeralStorageLimits, ss, nil)
 			}
 		case common.Requests:
 			switch res {
@@ -127,6 +129,8 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			case model.LabelValue(common.NvidiaGpuResource):
 				setValue(&n.gpuRequest, value)
 				common.WriteWorkload(nwp, nodeWorkloadWriters, common.GpuRequests, ss, nil)
+			case model.LabelValue(common.EphemeralStorage):
+				common.WriteWorkload(nwp, nodeWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
 			}
 		case common.CpuLimit:
 			setValue(&n.cpuLimit, value)
