@@ -149,7 +149,7 @@ func Metrics() {
 		query = `kube_node_status_allocatable_pods{}`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
-	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests)
+	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageLimits, common.EphemeralStorageRequests)
 
 	mh.name = common.Limits
 	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{}`, `) by (node, resource)`)
@@ -181,7 +181,7 @@ func Metrics() {
 	writeAttributes()
 
 	// get the reservation percent metrics
-	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent}
+	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent, common.EphemeralStorageReservationPercent}
 	var rpCoreMetrics = []*reservationPercentQuery{
 		{"kube_pod_container_resource_requests", common.FilterTerminatedContainersClause},
 		{"kube_node_status_allocatable", common.Empty},
@@ -191,14 +191,17 @@ func Metrics() {
 		false: `%s_%s{}%s`,
 	}
 	var rpArgs = map[bool][]string{
-		true:  {"cpu", "memory"},
-		false: {"cpu_cores", "memory_bytes"},
+		true:  {"cpu", "memory", "ephemeral_storage"},
+		false: {"cpu_cores", "memory_bytes", ""},
 	}
 
 	qw := simpleQueryWrapper(common.Node)
 	for _, f := range common.FoundIndicatorCounter(indicators, common.Requests) {
 		q := make([]string, len(rpCoreMetrics))
 		for i, wmh := range wmhs {
+			if rpArgs[f][i] == "" {
+				continue
+			}
 			for j, rpcm := range rpCoreMetrics {
 				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.clause))
 			}
@@ -238,6 +241,8 @@ func Metrics() {
 		common.CpuUtilization.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		getMemoryMetrics(qw)
+
+		getEphemeralStorageMetrics(qw)
 
 		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill{}[` + common.Params.Collection.SampleRateSt + `m]))`)
 		common.OomKillEvents.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
@@ -527,14 +532,16 @@ func SumToAverage(query string) string {
 }
 
 const (
-	memSReclaimable                 = "node_memory_SReclaimable_bytes"
-	memBaseQuery                    = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
-	memActualQueryFmt               = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}%s)"
-	memBaseWsQuery                  = `container_memory_working_set_bytes{id="/"}`
-	k8sIoHostname                   = "kubernetes_io_hostname"
-	utilizationFmt                  = `((%s) / on (%s) %s) * 100`
-	utilizationBaseQueryTotal       = `node_memory_MemTotal_bytes{}`
-	utilizationBaseQueryAllocatable = `kube_node_status_allocatable{resource="memory"}`
+	memSReclaimable                          = "node_memory_SReclaimable_bytes"
+	memBaseQuery                             = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
+	memActualQueryFmt                        = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}%s)"
+	memBaseWsQuery                           = `container_memory_working_set_bytes{id="/"}`
+	k8sIoHostname                            = "kubernetes_io_hostname"
+	utilizationFmt                           = `((%s) / on (%s) %s) * 100`
+	utilizationBaseQueryTotal                = `node_memory_MemTotal_bytes{}`
+	utilizationBaseQueryAllocatable          = `kube_node_status_allocatable{resource="memory"}`
+	ephemeralStorageBaseQuery                = "ephemeral_storage_node_capacity - ephemeral_storage_node_available"
+	utilizationBaseQueryEphemeralAllocatable = `kube_node_status_allocatable{resource="ephemeral_storage"}`
 )
 
 var memActualAdditionalMetrics string
@@ -563,6 +570,14 @@ func getMemoryMetrics(qw *QueryWrapper) {
 			query := qw.Query.Wrap(baseQuery)
 			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		}
+	}
+}
+func getEphemeralStorageMetrics(qw *QueryWrapper) {
+	utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
+	wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
+	for baseQuery, wmh := range wmhm {
+		query := qw.Query.Wrap(baseQuery)
+		wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 	}
 }
 
