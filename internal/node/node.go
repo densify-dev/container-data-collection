@@ -540,9 +540,10 @@ const (
 	utilizationFmt                           = `((%s) / on (%s) %s) * 100`
 	utilizationBaseQueryTotal                = `node_memory_MemTotal_bytes{}`
 	utilizationBaseQueryAllocatable          = `kube_node_status_allocatable{resource="memory"}`
-	ephemeralStorageBaseQuery                = "ephemeral_storage_node_capacity - ephemeral_storage_node_available"
 	utilizationBaseQueryEphemeralAllocatable = `kube_node_status_allocatable{resource="ephemeral_storage"}`
 )
+
+var ephemeralStorageBaseQuery = common.EphemeralExporterLabelReplace(`ephemeral_storage_node_capacity{} - ephemeral_storage_node_available{}`)
 
 var memActualAdditionalMetrics string
 

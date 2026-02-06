@@ -188,6 +188,10 @@ func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
 }
 
+func EphemeralExporterLabelReplace(query string) string {
+	return LabelReplace(query, Node, NodeName, Always)
+}
+
 func AggOverTimeQuery(q string, agg string) string {
 	return fmt.Sprintf("%s_over_time(%s[%v:])", agg, q, Step)
 }

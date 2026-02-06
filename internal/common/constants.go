@@ -174,6 +174,7 @@ var (
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
 	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
+	NodeName              = SnakeCase(Node, Name)
 )
 
 // GPU consts and vars
