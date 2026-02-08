@@ -213,6 +213,13 @@ func Metrics() {
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
+	utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
+	wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
+	for baseQuery, wmh := range wmhm {
+		query := qw.Query.Wrap(baseQuery)
+		wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+	}
+
 	if HasDcgmExporter(range5Min) {
 		query = qw.AvgQuery.Wrap(common.SafeDcgmGpuUtilizationQuery)
 		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
@@ -241,8 +248,6 @@ func Metrics() {
 		common.CpuUtilization.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
 		getMemoryMetrics(qw)
-
-		getEphemeralStorageMetrics(qw)
 
 		query = qw.Query.Wrap(`round(increase(node_vmstat_oom_kill{}[` + common.Params.Collection.SampleRateSt + `m]))`)
 		common.OomKillEvents.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
@@ -571,14 +576,6 @@ func getMemoryMetrics(qw *QueryWrapper) {
 			query := qw.Query.Wrap(baseQuery)
 			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		}
-	}
-}
-func getEphemeralStorageMetrics(qw *QueryWrapper) {
-	utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
-	wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
-	for baseQuery, wmh := range wmhm {
-		query := qw.Query.Wrap(baseQuery)
-		wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 	}
 }
 
