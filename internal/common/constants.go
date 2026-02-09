@@ -114,6 +114,8 @@ const (
 	Model       = "model"
 	Asterisk    = "*"
 	Hostname    = "Hostname"
+	Ephemeral   = "ephemeral"
+	Storage     = "storage"
 	None        = "none"
 )
 
@@ -171,6 +173,8 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
+	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
+	NodeName              = SnakeCase(Node, Name)
 )
 
 // GPU consts and vars
