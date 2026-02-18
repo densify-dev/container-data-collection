@@ -392,11 +392,12 @@ func LogAllMetrics() (err error) {
 }
 
 const (
-	cadvisor     = "cadvisor"
-	nodeExporter = "node-exporter"
-	ksm          = "kube-state-metrics"
-	ossm         = "openshift-state-metrics"
-	dcgm         = "dcgm-exporter"
+	cadvisor         = "cadvisor"
+	nodeExporter     = "node-exporter"
+	ksm              = "kube-state-metrics"
+	ossm             = "openshift-state-metrics"
+	dcgm             = "dcgm-exporter"
+	ephemeralStorage = "k8s-ephemeral-storage-metrics"
 )
 
 type exporter struct {
@@ -478,6 +479,7 @@ func makeExporters() map[string]*exporter {
 	addExporter(exps, ksm, "kube_pod_info", nil, false)
 	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
 	addExporter(exps, dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
+	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true)
 	return exps
 }
 
