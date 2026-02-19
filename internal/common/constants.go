@@ -116,6 +116,7 @@ const (
 	Hostname    = "Hostname"
 	Ephemeral   = "ephemeral"
 	Storage     = "storage"
+	Exported    = "exported"
 	None        = "none"
 )
 
@@ -175,6 +176,9 @@ var (
 	ModelName             = DromedaryCase(Model, Name)
 	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
 	NodeName              = SnakeCase(Node, Name)
+	PodName               = SnakeCase(Pod, Name)
+	PodNamespace          = SnakeCase(Pod, Namespace)
+	ExportedContainer     = SnakeCase(Exported, Container)
 )
 
 // GPU consts and vars

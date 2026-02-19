@@ -234,6 +234,8 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.restarts += int(value)
 		case powerSt:
 			c.powerState = powerState(value)
+		case common.EphemeralStorage:
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageUsageBytes, ss, nil)
 		}
 	}
 }

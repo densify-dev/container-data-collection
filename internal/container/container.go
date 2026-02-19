@@ -461,7 +461,7 @@ func Metrics() {
 
 	// container metrics
 	common.DebugLogObjectMemStats(common.Container)
-	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
+	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits, common.EphemeralStorageUsageBytes)
 
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
@@ -500,6 +500,44 @@ func Metrics() {
 		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
+	mh.metric = common.EphemeralStorage
+	rootfsUsage := common.LabelReplace(`ephemeral_storage_container_rootfs_used_bytes{}`, common.Container, common.ExportedContainer, common.HasValue)
+	logUsage := common.LabelReplace(`ephemeral_storage_container_logs_used_bytes{}`, common.Container, common.ExportedContainer, common.HasValue)
+	volumeUsage := common.LabelReplace(`ephemeral_storage_container_volume_usage{}`, common.Container, common.ExportedContainer, common.HasValue)
+	volumeCount := `count by (pod_name, pod_namespace, volume_name) (ephemeral_storage_container_volume_usage{})`
+	queryTemplate := fmt.Sprintf(`
+		(
+		  %[1]s	+ %[2]s
+		)
+		+ on(pod_name, pod_namespace, container) group_left()
+		(
+			sum by (pod_name, pod_namespace, container) (
+			  %[3]s
+			  * on(pod_name, pod_namespace, volume_name) group_left() 
+			  %[4]s == 1
+			) 
+			or
+			sum by (pod_name, pod_namespace, container) (
+			   %[2]s * 0
+			)
+		)
+		+ on(pod_name, pod_namespace, container) group_left()
+		(
+			sum by (pod_name, pod_namespace, container) (
+			  topk by (pod_name, pod_namespace, volume_name) (1, 
+			  %[3]s
+			  and on(pod_name, pod_namespace, volume_name)
+				%[4]s > 1
+			  )
+			)
+			or
+			sum by (pod_name, pod_namespace, container) (
+			   %[2]s  * 0
+			)
+		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
+	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
 	query = `kube_pod_container_info{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
 
