@@ -2,13 +2,12 @@ package container
 
 import (
 	"fmt"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
+	"strings"
+	"sync"
+	"time"
 )
 
 type namespace struct {
