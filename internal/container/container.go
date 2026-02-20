@@ -2,12 +2,13 @@ package container
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
-	"github.com/prometheus/common/model"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
+	"github.com/prometheus/common/model"
 )
 
 type namespace struct {
@@ -514,7 +515,7 @@ func Metrics() {
 			sum by (pod_name, pod_namespace, container) (
 			  %[3]s
 			  * on(pod_name, pod_namespace, volume_name) group_left() 
-			  %[4]s == 1
+			  (%[4]s == 1)
 			) 
 			or
 			sum by (pod_name, pod_namespace, container) (
@@ -525,9 +526,9 @@ func Metrics() {
 		(
 			sum by (pod_name, pod_namespace, container) (
 			  topk by (pod_name, pod_namespace, volume_name) (1, 
-			  %[3]s
-			  and on(pod_name, pod_namespace, volume_name)
-				%[4]s > 1
+			     %[3]s
+			     and on(pod_name, pod_namespace, volume_name)
+				 (%[4]s > 1)
 			  )
 			)
 			or
@@ -535,7 +536,7 @@ func Metrics() {
 			   %[2]s  * 0
 			)
 		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
-	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
+	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always) + fstsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
 	query = `kube_pod_container_info{}`

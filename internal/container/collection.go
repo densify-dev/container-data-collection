@@ -184,7 +184,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.gpuLimit = int(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
 			case common.EphemeralStorage:
-				c.ephemeralStorageLimit = int(value)
+				c.ephemeralStorageLimit = common.IntMiB(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageLimits, ss, nil)
 			}
 		case common.Requests:
@@ -199,7 +199,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.gpuRequest = int(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			case common.EphemeralStorage:
-				c.ephemeralStorageRequest = int(value)
+				c.ephemeralStorageRequest = common.IntMiB(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
 			}
 		case common.Memory:
