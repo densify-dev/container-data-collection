@@ -2,13 +2,12 @@ package container
 
 import (
 	"fmt"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
+	"strings"
+	"sync"
+	"time"
 )
 
 type namespace struct {
@@ -739,7 +738,7 @@ func Metrics() {
 			   %[2]s  * 0
 			)
 		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
-	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
+	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always) + fstsq
 	wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
