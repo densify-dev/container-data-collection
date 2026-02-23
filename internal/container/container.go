@@ -2,12 +2,13 @@ package container
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
-	"github.com/prometheus/common/model"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
+	"github.com/prometheus/common/model"
 )
 
 type namespace struct {
@@ -500,43 +501,6 @@ func Metrics() {
 		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
-	mh.metric = common.EphemeralStorage
-	rootfsUsage := common.LabelReplace(`ephemeral_storage_container_rootfs_used_bytes{}`, common.Container, common.ExportedContainer, common.HasValue)
-	logUsage := common.LabelReplace(`ephemeral_storage_container_logs_used_bytes{}`, common.Container, common.ExportedContainer, common.HasValue)
-	volumeUsage := common.LabelReplace(`ephemeral_storage_container_volume_usage{}`, common.Container, common.ExportedContainer, common.HasValue)
-	volumeCount := `count by (pod_name, pod_namespace, volume_name) (ephemeral_storage_container_volume_usage{})`
-	queryTemplate := fmt.Sprintf(`
-		(
-		  %[1]s	+ %[2]s
-		)
-		+ on(pod_name, pod_namespace, container) group_left()
-		(
-			sum by (pod_name, pod_namespace, container) (
-			  %[3]s
-			  * on(pod_name, pod_namespace, volume_name) group_left() 
-			  (%[4]s == 1)
-			) 
-			or
-			sum by (pod_name, pod_namespace, container) (
-			   %[2]s * 0
-			)
-		)
-		+ on(pod_name, pod_namespace, container) group_left()
-		(
-			sum by (pod_name, pod_namespace, container) (
-			  topk by (pod_name, pod_namespace, volume_name) (1, 
-			     %[3]s
-			     and on(pod_name, pod_namespace, volume_name)
-				 (%[4]s > 1)
-			  )
-			)
-			or
-			sum by (pod_name, pod_namespace, container) (
-			   %[2]s  * 0
-			)
-		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
-	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always) + fstsq
-	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
 	query = `kube_pod_container_info{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
@@ -738,11 +702,52 @@ func Metrics() {
 	wq.baseQuery = fmt.Sprintf(`sum(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
+	wq.metricName = common.CamelCase(common.Ephemeral, common.Storage, common.Usage, common.Bytes)
+	wq.aggregators[common.Avg] = common.Empty
+	wq.aggregatorAsSuffix = true
+	rootfsUsage := common.LabelReplace(`ephemeral_storage_container_rootfs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
+	logUsage := common.LabelReplace(`ephemeral_storage_container_logs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
+	volumeUsage := common.LabelReplace(`ephemeral_storage_container_volume_usage{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
+	volumeCount := `count by (pod_name, pod_namespace, volume_name) (ephemeral_storage_container_volume_usage{})`
+	queryTemplate := fmt.Sprintf(`
+		(
+		  %[1]s	+ %[2]s
+		)
+		+ on(pod_name, pod_namespace, container) group_left()
+		(
+			sum by (pod_name, pod_namespace, container) (
+			  %[3]s
+			  * on(pod_name, pod_namespace, volume_name) group_left()
+			  (%[4]s == 1)
+			)
+			or
+			sum by (pod_name, pod_namespace, container) (
+			   %[2]s * 0
+			)
+		)
+		+ on(pod_name, pod_namespace, container) group_left()
+		(
+			sum by (pod_name, pod_namespace, container) (
+			  topk by (pod_name, pod_namespace, volume_name) (1,
+			     %[3]s
+			     and on(pod_name, pod_namespace, volume_name)
+				 (%[4]s > 1)
+			  )
+			)
+			or
+			sum by (pod_name, pod_namespace, container) (
+			   %[2]s  * 0
+			)
+		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
+	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
+	wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	getWorkload(wq)
+
 	// container_fs_usage_bytes is an issue if the k8s cluster container runtime is containerd, see
 	// https://github.com/google/cadvisor/issues/2785, https://github.com/google/cadvisor/issues/3315
 	// it is supported by docker and cri-o container runtimes
 	wq.metricName = common.Disk
-	wq.aggregators[common.Avg] = common.Empty
+	wq.aggregatorAsSuffix = false
 	wq.baseQuery = fmt.Sprintf(`max(container_fs_usage_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
