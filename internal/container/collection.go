@@ -183,6 +183,9 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			case common.NvidiaGpuResource:
 				c.gpuLimit = int(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
+			case common.EphemeralStorage:
+				c.ephemeralStorageLimit = common.IntMiB(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageLimits, ss, nil)
 			}
 		case common.Requests:
 			switch resource {
@@ -195,6 +198,9 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			case common.NvidiaGpuResource:
 				c.gpuRequest = int(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
+			case common.EphemeralStorage:
+				c.ephemeralStorageRequest = common.IntMiB(value)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)
@@ -228,6 +234,8 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.restarts += int(value)
 		case powerSt:
 			c.powerState = powerState(value)
+		case common.EphemeralStorage:
+			common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageUsageBytes, ss, nil)
 		}
 	}
 }
