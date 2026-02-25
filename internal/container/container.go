@@ -2,12 +2,13 @@ package container
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
-	"github.com/prometheus/common/model"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
+	"github.com/prometheus/common/model"
 )
 
 type namespace struct {
@@ -708,6 +709,7 @@ func Metrics() {
 	logUsage := common.LabelReplace(`ephemeral_storage_container_logs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
 	volumeUsage := common.LabelReplace(`ephemeral_storage_container_volume_usage{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
 	volumeCount := `count by (pod_name, pod_namespace, volume_name) (ephemeral_storage_container_volume_usage{})`
+	terminatedFilter := ` * on(pod, namespace) group_left() (max by(pod, namespace) (kube_pod_status_phase{phase="Running"}) == 1)`
 	queryTemplate := fmt.Sprintf(`
 		(
 		  %[1]s	+ %[2]s
@@ -738,8 +740,8 @@ func Metrics() {
 			   %[2]s  * 0
 			)
 		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
-	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always) + fstsq
-	wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
+	wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx]) + terminatedFilter
 	getWorkload(wq)
 
 	// container_fs_usage_bytes is an issue if the k8s cluster container runtime is containerd, see
