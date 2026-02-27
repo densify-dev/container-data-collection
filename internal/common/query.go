@@ -10,7 +10,8 @@ type QueryAdjuster func(string) string
 const (
 	labelsPlaceholderBraces = leftBrace + labelsPlaceholder + rightBrace
 	commaLabelsPlaceholder  = Comma + labelsPlaceholder
-	ClusterCommentFmt       = " # " + ClusterFormat
+	CommentCharacter        = "#"
+	ClusterCommentFmt       = Space + CommentCharacter + Space + ClusterFormat
 )
 
 type clusterLabelsEmbedder interface {
@@ -40,7 +41,7 @@ func getClusterLabelsEmbedder(query string) (cle clusterLabelsEmbedder) {
 	var n int
 	if k := strings.Count(query, rightBrace); k > 0 {
 		qt, n = labeled, k
-	} else if strings.Contains(query, rightBracket) {
+	} else if strings.Contains(query, RightBracket) {
 		qt, n = aggregator, 1
 	} else {
 		qt = plain
@@ -102,7 +103,7 @@ func getComplexQuery(rightBracketIndices, rightBraceIndices []int) clusterLabels
 
 func (cq *complexQuery) embedClusterLabels(query string) (q string, err error) {
 	/*
-		if q, err = embedClusterLabels(query, rightBracket, cq.rightBracketIndices, labelsPlaceholderBraces); err == nil {
+		if q, err = embedClusterLabels(query, RightBracket, cq.rightBracketIndices, labelsPlaceholderBraces); err == nil {
 			q, err = embedClusterLabels(q, rightBrace, cq.rightBraceIndices, commaLabelsPlaceholder)
 		}
 	*/
@@ -159,6 +160,27 @@ func generateOrOrigin(s string, wg WrapperGenerator) string {
 	}
 }
 
+const (
+	DefaultFmt = "%v"
+)
+
+func FormatRepeatedAuto(format string, v any, other ...any) string {
+	n1 := strings.Count(format, DefaultFmt)
+	n2 := len(other)
+	n := n1 + n2
+	if n == 0 {
+		return fmt.Sprintf(format)
+	}
+	args := make([]any, n1, n)
+	for i := range n1 {
+		args[i] = v
+	}
+	if n2 > 0 {
+		args = append(args, other...)
+	}
+	return fmt.Sprintf(format, args...)
+}
+
 func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
 }
@@ -197,4 +219,14 @@ func GetClusterCommentQueryAdapters() map[string]QueryAdjuster {
 
 func ExcludeQueryByClusterComment(cluster string, query string) bool {
 	return !strings.HasSuffix(query, fmt.Sprintf(ClusterCommentFmt, cluster))
+}
+
+// SplitQuery separates a query into a trimmed netQuery and a comment.
+func SplitQuery(query string) (netQuery string, comment string) {
+	before, after, found := strings.Cut(query, CommentCharacter)
+	if found {
+		comment = Space + CommentCharacter + after
+	}
+	netQuery = strings.TrimRight(before, SpaceTab)
+	return
 }

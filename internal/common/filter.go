@@ -2,9 +2,10 @@ package common
 
 import (
 	"fmt"
+	"strings"
+
 	cconf "github.com/densify-dev/container-config/config"
 	"github.com/prometheus/common/model"
-	"strings"
 )
 
 type labelFilter struct {
@@ -190,9 +191,9 @@ func (lf *labelFilter) calculateFilter(lss ...model.LabelSet) {
 	case 0:
 		return
 	case 1:
-		op = exactEqual
+		op = ExactEqual
 	default:
-		op = regexMatch
+		op = RegexMatch
 	}
 	ks := SortedKeySet(lss[0])
 	n := len(ks)
@@ -245,7 +246,7 @@ func cleanQuery(query string) string {
 	s = strings.ReplaceAll(s, leftBraceComma, leftBrace)
 	s = strings.ReplaceAll(s, commaRightBrace, rightBrace)
 	s = strings.ReplaceAll(s, leftBracketComma, leftBracket)
-	s = strings.ReplaceAll(s, commaRightBracket, rightBracket)
+	s = strings.ReplaceAll(s, commaRightBracket, RightBracket)
 	// this may leave us with empty selectors in the form of "()" or empty label selectors in the form of "{}"
 	s = strings.ReplaceAll(s, emptyByClause, Empty)
 	s = strings.ReplaceAll(s, Braces, Empty)

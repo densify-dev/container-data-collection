@@ -99,7 +99,7 @@ func gmpQueryAdjuster(query string) string {
 		// IMPORTANT CHECK: If we matched an `_over_time` function, we must double-check
 		// that it actually contains a kube-state-metrics metric. This prevents false positives on
 		// complex queries where the regex might over-match.
-		if strings.HasSuffix(match, rightBracket) && strings.Contains(match, overTimeSuffix) {
+		if strings.HasSuffix(match, RightBracket) && strings.Contains(match, overTimeSuffix) {
 			var found bool
 			for _, metricPrefix := range metricPrefixes {
 				if found = strings.Contains(match, metricPrefix); found {

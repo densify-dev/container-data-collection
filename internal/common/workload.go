@@ -2,13 +2,14 @@ package common
 
 import (
 	"fmt"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
-	"github.com/prometheus/common/model"
 	"io"
 	"math"
 	"os"
 	"strings"
 	"time"
+
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 )
 
 type NameType uint
@@ -203,10 +204,11 @@ func GetConditionalMetricsWorkload(indicators map[string]int, indicator string, 
 			n := strings.Count(q, "%s")
 			for querySub, metricFields := range querySubToMetricFields {
 				querySubs := make([]any, n)
+				qs, comment := SplitQuery(querySub)
 				for j := 0; j < n; j++ {
-					querySubs[j] = querySub
+					querySubs[j] = qs
 				}
-				query := fmt.Sprintf(q, querySubs...)
+				query := fmt.Sprintf(q, querySubs...) + comment
 				qps[query] = &QueryProcessor{MetricFields: metricFields}
 			}
 			cmh := conditionalMetricHolders[i]

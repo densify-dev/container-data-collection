@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/densify-dev/container-data-collection/internal/common"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -58,57 +59,47 @@ var nodeLabelToProviderType = map[model.LabelName]NodeLabelProviderType{
 	PoolNameLabel:  UnclassifiedProvider,
 }
 
+var (
+	labelCoreQueryFmt = fmt.Sprintf(`%s{%s=~".+"}`, NodeLabelMetric, common.DefaultFmt)
+)
+
 func GetProviderType(ln model.LabelName) NodeLabelProviderType {
 	return nodeLabelToProviderType[ln]
 }
 
-var nodeGroupLabels = make(map[model.LabelName]bool)
-var ngl []model.LabelName
-
 type labelFeature struct {
-	labelNames           []model.LabelName
-	useDefault           bool
-	openshiftClusterName string
-	roleValues           []model.LabelValue
-}
-
-type queryFeature struct {
-	query   string
-	onLabel model.LabelName
+	labelNames []model.LabelName
+	useDefault bool
 }
 
 func (lf *labelFeature) Type() featureType {
 	return labelType
 }
 
-func (lf *labelFeature) NodeGroupQueryFeatures() (qfs []*queryFeature) {
-	switch {
-	case len(lf.roleValues) > 0:
-		for _, rv := range lf.roleValues {
-			qfs = append(qfs, &queryFeature{
-				query:   fmt.Sprintf(`%s{%s="%v"}`, NodeRoleMetric, common.Role, rv),
-				onLabel: common.Role,
-			})
-		}
-	case len(lf.labelNames) > 0:
-		for _, ln := range lf.labelNames {
-			var query, metric string
-			switch ln {
-			case NonExistingLabel:
-				metric = NodeInfoMetric
-			default:
-				metric = NodeLabelMetric
-			}
-			if lf.useDefault {
-				sln := string(ln)
-				query = common.LabelReplaceArbitraryValue(metric+common.Braces, sln, string(DefaultNodeGroup), sln, common.EmptyRegex)
-			} else {
-				query = fmt.Sprintf(`%s{%s=~"%v"}`, metric, ln, common.HasValue.String())
-			}
-			qfs = append(qfs, &queryFeature{
-				query:   query,
-				onLabel: ln,
-			})
+func (lf *labelFeature) NodeAndGroupCoreQueryFmt() string {
+	return labelCoreQueryFmt
+}
+
+func (lf *labelFeature) LabelNames() []model.LabelName {
+	return lf.labelNames
+}
+
+func (lf *labelFeature) AdjustNodeGroupName(name string) string {
+	return name
+}
+
+func determineLabelFeatures(promRange *v1.Range) (err error) {
+	query := "avg(kube_node_labels{}) by (" + common.ToPrometheusLabelNameList(common.Params.Collection.NodeGroupList) + common.RightBracket
+	if _, err = common.CollectAndProcessMetric(query, promRange, detectNameLabel); err != nil {
+		// error already handled
+		return
+	}
+	for ngl := range allLabelNames {
+		ngh := &nodeGroupHolder{nodeGroupLabel: ngl}
+		query = common.FormatRepeatedAuto(labelCoreQueryFmt, ngl)
+		if _, err = common.CollectAndProcessMetric(query, promRange, ngh.createNodeGroup); err != nil {
+			// error already handled
+			return
 		}
 	}
 	return
@@ -117,6 +108,8 @@ func (lf *labelFeature) NodeGroupQueryFeatures() (qfs []*queryFeature) {
 func labelNameCmp(lna, lnb model.LabelName) int {
 	return cmp.Compare(GetProviderType(lna), GetProviderType(lnb))
 }
+
+var allLabelNames = make(map[model.LabelName]bool)
 
 func detectNameLabel(cluster string, result model.Matrix) {
 	var foundDefault bool
@@ -152,15 +145,8 @@ func detectNameLabel(cluster string, result model.Matrix) {
 			labelNames: lns,
 			useDefault: !foundDefault && llns < 2,
 		}
+		for _, ln := range lns {
+			allLabelNames[ln] = true
+		}
 	}
-	/*else if len(node.ClusterNodeRoles[cluster]) > 0 {
-		clusterFeatures[cluster] = &labelFeature{
-			roleValues: maps.Keys(node.ClusterNodeRoles[cluster]),
-		}
-	} else {
-		clusterFeatures[cluster] = &labelFeature{
-			labelNames: []model.LabelName{NonExistingLabel},
-			useDefault: true,
-		}
-	}*/
 }

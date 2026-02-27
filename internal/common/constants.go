@@ -117,6 +117,7 @@ const (
 	None        = "none"
 	Role        = "role"
 	ExcComment  = "exclude-by-cluster-comment"
+	Prefix      = "prefix"
 )
 
 // owner kind labels
@@ -188,6 +189,7 @@ var (
 	Gpus              = Plural(Gpu)
 	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
 	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
+	NamePrefix        = SnakeCase(Name, Prefix)
 )
 
 func Join(sep string, elements ...string) string {
@@ -231,14 +233,16 @@ func Singular(s string) string {
 }
 
 const (
-	exactEqual         = "="
-	regexMatch         = "=~"
+	ExactEqual         = "="
+	RegexMatch         = "=~"
+	NotEqual           = "!="
+	NotRegexMatch      = "!~"
 	Or                 = "|"
 	DoubleQuote        = "\""
 	leftBrace          = "{"
 	rightBrace         = "}"
 	leftBracket        = "("
-	rightBracket       = ")"
+	RightBracket       = ")"
 	leftSquareBracket  = "["
 	rightSquareBracket = "]"
 	squareBrackets     = leftSquareBracket + rightSquareBracket
@@ -246,6 +250,8 @@ const (
 	Dot                = cconf.Dot
 	Slash              = cconf.Slash
 	Space              = " "
+	Tab                = "\t"
+	SpaceTab           = Space + Tab
 	Underscore         = "_"
 	cr                 = "\r"
 	lf                 = "\n"
@@ -255,9 +261,9 @@ const (
 	Braces             = leftBrace + rightBrace
 	leftBraceComma     = leftBrace + Comma
 	commaRightBrace    = Comma + rightBrace
-	Brackets           = leftBracket + rightBracket
+	Brackets           = leftBracket + RightBracket
 	leftBracketComma   = leftBracket + Comma
-	commaRightBracket  = Comma + rightBracket
+	commaRightBracket  = Comma + RightBracket
 	commaComma         = Comma + Comma
 	nonEmptyLabel      = `=~".+"`
 )
@@ -306,7 +312,7 @@ func Wrap(s string, bracket Bracket) string {
 	switch bracket {
 	case Parenthesis:
 		left = leftBracket
-		right = rightBracket
+		right = RightBracket
 	case SquareBracket:
 		left = leftSquareBracket
 		right = rightSquareBracket
