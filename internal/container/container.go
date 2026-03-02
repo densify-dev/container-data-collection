@@ -462,7 +462,7 @@ func Metrics() {
 
 	// container metrics
 	common.DebugLogObjectMemStats(common.Container)
-	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits, common.EphemeralStorageUsageBytes)
+	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
 
 	mh := &metricHolder{metric: common.Memory}
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
@@ -729,11 +729,10 @@ func Metrics() {
 		+ on(pod_name, pod_namespace, container) group_left()
 		(
 			sum by (pod_name, pod_namespace, container) (
-			  topk by (pod_name, pod_namespace, volume_name) (1,
-			     %[3]s
-			     and on(pod_name, pod_namespace, volume_name)
-				 (%[4]s > 1)
-			  )
+			  bottomk (1, %[3]s)
+			  by (pod_name, pod_namespace, volume_name)
+			  and on(pod_name, pod_namespace, volume_name)
+			  (%[4]s > 1)	
 			)
 			or
 			sum by (pod_name, pod_namespace, container) (
