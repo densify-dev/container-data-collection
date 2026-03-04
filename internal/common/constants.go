@@ -182,6 +182,8 @@ var (
 	PodName               = SnakeCase(Pod, Name)
 	PodNamespace          = SnakeCase(Pod, Namespace)
 	ExportedContainer     = SnakeCase(Exported, Container)
+	ExportedNamespace     = SnakeCase(Exported, Namespace)
+	ExportedPod           = SnakeCase(Exported, Pod)
 )
 
 // GPU consts and vars

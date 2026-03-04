@@ -213,11 +213,15 @@ func Metrics() {
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
-	utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
-	wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
-	for baseQuery, wmh := range wmhm {
-		query := qw.Query.Wrap(baseQuery)
-		wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+	if HasEphemeralStorageExporter(range5Min) {
+		utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
+		wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
+		for baseQuery, wmh := range wmhm {
+			query := qw.Query.Wrap(baseQuery)
+			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		}
+	} else {
+		common.LogAll(1, common.Info, "entity=%s Ephemeral storage exporter metrics not present for any cluster", common.NodeEntityKind)
 	}
 
 	if HasDcgmExporter(range5Min) {
@@ -411,11 +415,15 @@ const (
 
 var once sync.Once
 
+func pivotQuery(query string) string {
+	return fmt.Sprintf("max(%s) by (%s)", query, common.Node)
+}
+
 func DetermineExporters(range5Min *v1.Range) {
 	once.Do(func() {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
-		dcgmExporterPivotQuery := fmt.Sprintf("max(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node)
-		_, _ = common.CollectAndProcessMetric(dcgmExporterPivotQuery, range5Min, determineDcgmExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
 	})
 }
 
@@ -452,6 +460,14 @@ func determineDcgmExporter(cluster string, result model.Matrix) {
 	}
 }
 
+var ephemeralStorageExporterIndicators = make(map[string]bool)
+
+func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		ephemeralStorageExporterIndicators[cluster] = true
+	}
+}
+
 // HasNodeExporter returns true if node exporter metrics are present for any cluster
 func HasNodeExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
@@ -462,6 +478,12 @@ func HasNodeExporter(range5Min *v1.Range) bool {
 func HasDcgmExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(dcgmExporterIndicators) > 0
+}
+
+// HasEphemeralStorageExporter returns true if DCGM exporter metrics are present for any cluster
+func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(ephemeralStorageExporterIndicators) > 0
 }
 
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}

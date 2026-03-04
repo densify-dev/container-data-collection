@@ -61,15 +61,12 @@ func getObservabilityPlatform() ObservabilityPlatform {
 const (
 	// balancedParens pattern matches balanced parentheses. It can handle multiple levels of nesting.
 	balancedParens = `\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)`
-	exported       = "exported"
 	overTimeSuffix = "_over_time"
 )
 
 var (
 	platformQueryAdjusters = map[ObservabilityPlatform]QueryAdjuster{GoogleManagedPrometheus: gmpQueryAdjuster}
 	metricPrefixes         = []string{exporters[ksm].getPrefix(), exporters[dcgm].getPrefix()}
-	exportedNamespace      = SnakeCase(exported, Namespace)
-	exportedPod            = SnakeCase(exported, Pod)
 	gmpRe                  = buildGmpRegex()
 )
 
@@ -114,6 +111,6 @@ func gmpQueryAdjuster(query string) string {
 		}
 		// For all valid matches (either the `_over_time` with a kube-state-metrics or DCGM metric,
 		// or a raw kube-state-metrics or DCGM metric), apply the wrapper.
-		return LabelReplace(LabelReplace(match, Namespace, exportedNamespace, HasValue), Pod, exportedPod, HasValue)
+		return LabelReplace(LabelReplace(match, Namespace, ExportedNamespace, HasValue), Pod, ExportedPod, HasValue)
 	})
 }
