@@ -114,6 +114,9 @@ const (
 	Model       = "model"
 	Asterisk    = "*"
 	Hostname    = "Hostname"
+	Ephemeral   = "ephemeral"
+	Storage     = "storage"
+	Exported    = "exported"
 	None        = "none"
 	Role        = "role"
 	ExcComment  = "exclude-by-cluster-comment"
@@ -174,6 +177,11 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
+	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
+	NodeName              = SnakeCase(Node, Name)
+	PodName               = SnakeCase(Pod, Name)
+	PodNamespace          = SnakeCase(Pod, Namespace)
+	ExportedContainer     = SnakeCase(Exported, Container)
 )
 
 // GPU consts and vars
