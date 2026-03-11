@@ -202,9 +202,17 @@ func DcgmAggOverTimeQuery(q string, agg string) string {
 // Not clear if this was caused by a GPU which is pegged to 100% or an issue in DCGM exporter
 var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 
+func PercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
+	what := JoinComma(onWhat...)
+	var sel string
+	if len(selector) == 2 {
+		sel = fmt.Sprintf(`%s="%s"`, selector[0], selector[1])
+	}
+	return fmt.Sprintf(` * on (%s) %s{%s} / 100`, what, metric, sel)
+}
+
 func DcgmPercentQuerySuffix(metric string, onWhat ...string) string {
-	what := strings.Join(onWhat, Comma)
-	return fmt.Sprintf(` * on (%s) %s{%s="%s"} / 100`, what, metric, Resource, NvidiaGpuResource)
+	return PercentQuerySuffix(metric, []string{Resource, NvidiaGpuResource}, onWhat...)
 }
 
 var clusterCommentQueryAdjusters map[string]QueryAdjuster

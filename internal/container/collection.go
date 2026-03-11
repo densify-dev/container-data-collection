@@ -2,14 +2,15 @@ package container
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
-	"github.com/prometheus/common/model"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
+	"github.com/prometheus/common/model"
 )
 
 const (
@@ -181,8 +182,11 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.cpuLimit = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
 			case common.NvidiaGpuResource:
-				c.gpuLimit = int(value)
-				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
+				if node.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
+					c.gpuLimit = int(value)
+					c.gpuLimitFloat = value
+					common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
+				}
 			case common.EphemeralStorage:
 				c.ephemeralStorageLimit = common.IntMiB(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageLimits, ss, nil)
@@ -196,11 +200,24 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.cpuRequest = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 			case common.NvidiaGpuResource:
-				c.gpuRequest = int(value)
-				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
+				if node.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
+					c.gpuRequest = int(value)
+					c.gpuRequestFloat = value
+					common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
+				}
 			case common.EphemeralStorage:
 				c.ephemeralStorageRequest = common.IntMiB(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
+			}
+		// GPU requests and limits are the same, populate both
+		case common.GpuFraction:
+			if node.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
+				c.gpuLimit = int(value)
+				c.gpuRequest = int(value)
+				c.gpuLimitFloat = value
+				c.gpuRequestFloat = value
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)

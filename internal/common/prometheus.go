@@ -396,8 +396,9 @@ const (
 	nodeExporter     = "node-exporter"
 	ksm              = "kube-state-metrics"
 	ossm             = "openshift-state-metrics"
-	dcgm             = "dcgm-exporter"
+	Dcgm             = "dcgm-exporter"
 	ephemeralStorage = "k8s-ephemeral-storage-metrics"
+	KubexGpu         = "kubex-gpu-exporter"
 )
 
 type exporter struct {
@@ -473,13 +474,14 @@ func setScrapeInterval(target *time.Duration, ss *model.SampleStream) {
 var exporters = makeExporters()
 
 func makeExporters() map[string]*exporter {
-	exps := make(map[string]*exporter, 5)
+	exps := make(map[string]*exporter, 7)
 	addExporter(exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false)
 	addExporter(exps, nodeExporter, "node_cpu_seconds_total", nil, false)
 	addExporter(exps, ksm, "kube_pod_info", nil, false)
 	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
-	addExporter(exps, dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
+	addExporter(exps, Dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
 	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true)
+	addExporter(exps, KubexGpu, "kubex_gpu_container_sm_utilization_percent", nil, true)
 	return exps
 }
 

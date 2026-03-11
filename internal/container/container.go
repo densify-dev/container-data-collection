@@ -8,6 +8,7 @@ import (
 
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/node"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
@@ -139,10 +140,11 @@ type container struct {
 	gpuLimit, gpuRequest,
 	restarts,
 	ephemeralStorageLimit, ephemeralStorageRequest int
-	powerState                   powerState
-	name                         string
-	gpuModel, gpuSharingStrategy string
-	labelMap                     map[string]string
+	gpuLimitFloat, gpuRequestFloat float64
+	powerState                     powerState
+	name                           string
+	gpuModel, gpuSharingStrategy   string
+	labelMap                       map[string]string
 }
 
 var nonContinuousKinds = map[string]bool{
@@ -398,7 +400,9 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			memLimit:                common.UnknownValue,
 			memRequest:              common.UnknownValue,
 			gpuLimit:                common.UnknownValue,
+			gpuLimitFloat:           common.UnknownValueFloat,
 			gpuRequest:              common.UnknownValue,
+			gpuRequestFloat:         common.UnknownValueFloat,
 			powerState:              common.UnknownValue,
 			ephemeralStorageLimit:   common.UnknownValue,
 			ephemeralStorageRequest: common.UnknownValue,
@@ -435,13 +439,15 @@ func getOwnerQuery(metricName string, owned bool) (query string) {
 	return
 }
 
+var range5Min *v1.Range
+
 // Metrics function to collect data related to containers.
 func Metrics() {
 	var query string
 	var err error
 	var n int
 
-	range5Min := common.TimeRange()
+	range5Min = common.TimeRange()
 
 	common.DebugLogMemStats(1, "container data collection")
 	// queries to gather hierarchy information for containers
@@ -491,6 +497,7 @@ func Metrics() {
 		query = fmt.Sprintf("sum(kube_pod_container_resource_limits_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
+
 	mh.metric = common.Requests
 	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
@@ -499,6 +506,13 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 		mh.metric = common.MemRequest
 		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_memory_bytes{}%s) by (pod,namespace,container)", fstsq)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+	}
+
+	if node.HasKubexGpuExporter(range5Min) {
+		// need to get limits & requests using specific queries
+		mh.metric = common.GpuFraction
+		query = fmt.Sprintf("sum(kubex_gpu_fraction{}%s) by (pod,namespace,container)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
@@ -764,9 +778,7 @@ func Metrics() {
 		common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
-	if node.HasDcgmExporter(range5Min) {
-		getGpuWorkloads(wq)
-	}
+	getGpuWorkloads(range5Min, wq)
 
 	wq.metricName = restarts
 	wq.wqwIdx = containerIdx
@@ -829,45 +841,73 @@ func Metrics() {
 
 type gpuWorkloadQuery struct {
 	metricName       string
-	baseQuery        string
+	baseQuery        map[string]string
 	appendToPrevious bool
 }
 
 var gpuWorkloadQueries = []*gpuWorkloadQuery{
 	{
 		metricName: common.CamelCase(common.Gpu, common.Utilization),
-		baseQuery:  common.SafeDcgmGpuUtilizationQuery,
+		baseQuery: map[string]string{
+			common.Dcgm:     common.SafeDcgmGpuUtilizationQuery,
+			common.KubexGpu: "kubex_gpu_container_sm_utilization_percent{}",
+		},
 	},
 	{
-		metricName:       common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
-		baseQuery:        common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
+		metricName: common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
+		baseQuery: map[string]string{
+			common.Dcgm:     common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
+			common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_fraction", nil, common.Namespace, common.Pod, common.Container),
+		},
 		appendToPrevious: true,
 	},
 	{
 		metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
-		baseQuery:  "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+		baseQuery: map[string]string{
+			common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+			common.KubexGpu: "kubex_gpu_container_memory_footprint_percent{}",
+		},
 	},
 	{
 		metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
-		baseQuery:  "DCGM_FI_DEV_FB_USED{}",
+		baseQuery: map[string]string{
+			common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
+			common.KubexGpu: "kubex_gpu_container_memory_bytes{}",
+		},
 	},
 	{
 		metricName: common.CamelCase(common.Gpu, common.Power, common.Usage),
-		baseQuery:  "DCGM_FI_DEV_POWER_USAGE{}",
+		baseQuery: map[string]string{
+			common.Dcgm: "DCGM_FI_DEV_POWER_USAGE{}",
+			// cannot map the power usage to a specific process
+		},
 	},
 }
 
 var gpuAggregators = []string{common.Avg, common.Max}
 
-func getGpuWorkloads(wq *workloadQuery) {
+var gpuAggOverTime = map[string]func(string, string) string{
+	common.Dcgm:     common.DcgmAggOverTimeQuery,
+	common.KubexGpu: common.AggOverTimeQuery,
+}
+
+func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery) {
+	ge := node.DetermineGpuExporter(range5Min)
+	if ge == common.Empty {
+		return
+	}
 	wq.aggregatorAsSuffix = true
 	for _, agg := range gpuAggregators {
 		for _, gwq := range gpuWorkloadQueries {
+			baseQuery := gwq.baseQuery[ge]
+			if baseQuery == common.Empty {
+				continue
+			}
 			wq.metricName = gwq.metricName
 			if gwq.appendToPrevious {
-				wq.baseQuery += gwq.baseQuery
+				wq.baseQuery += baseQuery
 			} else {
-				wq.baseQuery = common.DcgmAggOverTimeQuery(gwq.baseQuery, agg)
+				wq.baseQuery = gpuAggOverTime[ge](baseQuery, agg)
 			}
 			wq.aggregators = map[string]string{agg: common.Empty}
 			getWorkload(wq)

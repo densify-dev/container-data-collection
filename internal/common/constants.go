@@ -121,6 +121,7 @@ const (
 	Role        = "role"
 	ExcComment  = "exclude-by-cluster-comment"
 	Prefix      = "prefix"
+	Fraction    = "fraction"
 )
 
 // owner kind labels
@@ -200,6 +201,7 @@ var (
 	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
 	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
 	NamePrefix        = SnakeCase(Name, Prefix)
+	GpuFraction       = CamelCase(Gpu, Fraction)
 )
 
 func Join(sep string, elements ...string) string {

@@ -424,6 +424,7 @@ func DetermineExporters(range5Min *v1.Range) {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_sm_utilization_percent{}"), range5Min, determineKubexGpuExporter)
 	})
 }
 
@@ -452,11 +453,14 @@ func determineNodeExporter(cluster string, result model.Matrix) {
 	}
 }
 
+var gpuExporters = make(map[string][]string)
+
 var dcgmExporterIndicators = make(map[string]bool)
 
 func determineDcgmExporter(cluster string, result model.Matrix) {
 	if l := result.Len(); l > 0 {
 		dcgmExporterIndicators[cluster] = true
+		gpuExporters[common.Dcgm] = append(gpuExporters[common.Dcgm], cluster)
 	}
 }
 
@@ -465,6 +469,15 @@ var ephemeralStorageExporterIndicators = make(map[string]bool)
 func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
 	if l := result.Len(); l > 0 {
 		ephemeralStorageExporterIndicators[cluster] = true
+	}
+}
+
+var kubexGpuExporterIndicators = make(map[string]bool)
+
+func determineKubexGpuExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		kubexGpuExporterIndicators[cluster] = true
+		gpuExporters[common.KubexGpu] = append(gpuExporters[common.KubexGpu], cluster)
 	}
 }
 
@@ -484,6 +497,40 @@ func HasDcgmExporter(range5Min *v1.Range) bool {
 func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(ephemeralStorageExporterIndicators) > 0
+}
+
+// HasKubexGpuExporter returns true if DCGM exporter metrics are present for any cluster
+func HasKubexGpuExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(kubexGpuExporterIndicators) > 0
+}
+
+func GetGpuExporters(range5Min *v1.Range) map[string][]string {
+	DetermineExporters(range5Min)
+	return gpuExporters
+}
+
+var gpuExportersOrdered = []string{common.KubexGpu, common.Dcgm}
+
+func DetermineGpuExporter(range5Min *v1.Range) (s string) {
+	ges := GetGpuExporters(range5Min)
+	for _, ge := range gpuExportersOrdered {
+		if len(ges[ge]) > 0 {
+			s = ge
+			break
+		}
+	}
+	return
+}
+
+func GetGpuExporterType(range5Min *v1.Range, cluster string) (s string) {
+	DetermineExporters(range5Min)
+	if kubexGpuExporterIndicators[cluster] {
+		s = common.KubexGpu
+	} else if dcgmExporterIndicators[cluster] {
+		s = common.Dcgm
+	}
+	return
 }
 
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
