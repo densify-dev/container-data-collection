@@ -203,12 +203,16 @@ func DcgmAggOverTimeQuery(q string, agg string) string {
 var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 
 func PercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
-	what := JoinComma(onWhat...)
-	var sel string
-	if len(selector) == 2 {
-		sel = fmt.Sprintf(`%s="%s"`, selector[0], selector[1])
+	var suffixPrefix string
+	if metric != Empty {
+		what := JoinComma(onWhat...)
+		var sel string
+		if len(selector) == 2 {
+			sel = fmt.Sprintf(`%s="%s"`, selector[0], selector[1])
+		}
+		suffixPrefix = fmt.Sprintf(` * on (%s) %s{%s}`, what, metric, sel)
 	}
-	return fmt.Sprintf(` * on (%s) %s{%s} / 100`, what, metric, sel)
+	return suffixPrefix + " / 100"
 }
 
 func DcgmPercentQuerySuffix(metric string, onWhat ...string) string {

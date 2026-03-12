@@ -857,7 +857,7 @@ var gpuWorkloadQueries = []*gpuWorkloadQuery{
 		metricName: common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
 		baseQuery: map[string]string{
 			common.Dcgm:     common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
-			common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_fraction", nil, common.Namespace, common.Pod, common.Container),
+			common.KubexGpu: common.PercentQuerySuffix(common.Empty, nil, common.Namespace, common.Pod, common.Container),
 		},
 		appendToPrevious: true,
 	},
