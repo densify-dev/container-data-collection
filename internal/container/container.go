@@ -872,7 +872,7 @@ var gpuWorkloadQueries = []*gpuWorkloadQuery{
 		metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
 		baseQuery: map[string]string{
 			common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
-			common.KubexGpu: "kubex_gpu_container_memory_bytes{}",
+			common.KubexGpu: fmt.Sprintf("(kubex_gpu_container_memory_bytes{} / %d)", common.Mib),
 		},
 	},
 	{

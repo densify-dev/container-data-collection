@@ -1,25 +1,26 @@
 package common
 
 import (
-	"github.com/prometheus/common/model"
 	"strconv"
+
+	"github.com/prometheus/common/model"
 )
 
 const (
 	UnknownValue      = -1
 	UnknownValueFloat = -1.0
-	mib               = 1024 * 1024
-	milli             = 1000
+	Mib               = 1024 * 1024
+	Milli             = 1000
 )
 
 type ConvFunc[N Number] func(N) N
 
 func MiB[N Number](n N) N {
-	return n / N(mib)
+	return n / N(Mib)
 }
 
 func MCores[N Number](n N) N {
-	return n * N(milli)
+	return n * N(Milli)
 }
 
 func IntMiB[N Number](n N) int {
