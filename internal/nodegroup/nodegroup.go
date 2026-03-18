@@ -341,8 +341,11 @@ func Metrics() {
 	ccqas := common.GetClusterCommentQueryAdapters()
 
 	for cluster, ccqa := range ccqas {
+		cf, ok := clusterFeatures[cluster]
+		if cf == nil || !ok {
+			continue
+		}
 		var queryFmt string
-		cf := clusterFeatures[cluster]
 		for _, labelName := range cf.LabelNames() {
 			configSuffix := QuerySuffixFmt(cf, common.ConfigSt, true)
 			ngh := &nodeGroupHolder{nodeGroupLabel: labelName}
