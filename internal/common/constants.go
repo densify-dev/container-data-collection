@@ -114,7 +114,14 @@ const (
 	Model       = "model"
 	Asterisk    = "*"
 	Hostname    = "Hostname"
+	Ephemeral   = "ephemeral"
+	Storage     = "storage"
+	Exported    = "exported"
 	None        = "none"
+	Role        = "role"
+	ExcComment  = "exclude-by-cluster-comment"
+	Prefix      = "prefix"
+	Fraction    = "fraction"
 )
 
 // owner kind labels
@@ -171,6 +178,13 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
+	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
+	NodeName              = SnakeCase(Node, Name)
+	PodName               = SnakeCase(Pod, Name)
+	PodNamespace          = SnakeCase(Pod, Namespace)
+	ExportedContainer     = SnakeCase(Exported, Container)
+	ExportedNamespace     = SnakeCase(Exported, Namespace)
+	ExportedPod           = SnakeCase(Exported, Pod)
 )
 
 // GPU consts and vars
@@ -186,6 +200,8 @@ var (
 	Gpus              = Plural(Gpu)
 	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
 	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
+	NamePrefix        = SnakeCase(Name, Prefix)
+	GpuFraction       = CamelCase(Gpu, Fraction)
 )
 
 func Join(sep string, elements ...string) string {
@@ -229,14 +245,16 @@ func Singular(s string) string {
 }
 
 const (
-	exactEqual         = "="
-	regexMatch         = "=~"
+	ExactEqual         = "="
+	RegexMatch         = "=~"
+	NotEqual           = "!="
+	NotRegexMatch      = "!~"
 	Or                 = "|"
 	DoubleQuote        = "\""
 	leftBrace          = "{"
 	rightBrace         = "}"
 	leftBracket        = "("
-	rightBracket       = ")"
+	RightBracket       = ")"
 	leftSquareBracket  = "["
 	rightSquareBracket = "]"
 	squareBrackets     = leftSquareBracket + rightSquareBracket
@@ -244,6 +262,8 @@ const (
 	Dot                = cconf.Dot
 	Slash              = cconf.Slash
 	Space              = " "
+	Tab                = "\t"
+	SpaceTab           = Space + Tab
 	Underscore         = "_"
 	cr                 = "\r"
 	lf                 = "\n"
@@ -253,9 +273,9 @@ const (
 	Braces             = leftBrace + rightBrace
 	leftBraceComma     = leftBrace + Comma
 	commaRightBrace    = Comma + rightBrace
-	Brackets           = leftBracket + rightBracket
+	Brackets           = leftBracket + RightBracket
 	leftBracketComma   = leftBracket + Comma
-	commaRightBracket  = Comma + rightBracket
+	commaRightBracket  = Comma + RightBracket
 	commaComma         = Comma + Comma
 	nonEmptyLabel      = `=~".+"`
 )
@@ -289,4 +309,31 @@ func dromedaryCase(s string) string {
 
 func snakeCase(s string) string {
 	return strcase.ToSnake(s)
+}
+
+type Bracket int
+
+const (
+	Parenthesis Bracket = iota
+	SquareBracket
+	Brace
+)
+
+func Wrap(s string, bracket Bracket) string {
+	var left, right string
+	switch bracket {
+	case Parenthesis:
+		left = leftBracket
+		right = RightBracket
+	case SquareBracket:
+		left = leftSquareBracket
+		right = rightSquareBracket
+	case Brace:
+		left = leftBrace
+		right = rightBrace
+	default:
+		left = Empty
+		right = Empty
+	}
+	return left + s + right
 }

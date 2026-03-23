@@ -2,9 +2,10 @@ package common
 
 import (
 	"fmt"
+	"sort"
+
 	"github.com/samber/lo"
 	"golang.org/x/exp/constraints"
-	"sort"
 )
 
 // Number -

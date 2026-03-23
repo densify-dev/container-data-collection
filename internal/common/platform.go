@@ -61,15 +61,12 @@ func getObservabilityPlatform() ObservabilityPlatform {
 const (
 	// balancedParens pattern matches balanced parentheses. It can handle multiple levels of nesting.
 	balancedParens = `\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)`
-	exported       = "exported"
 	overTimeSuffix = "_over_time"
 )
 
 var (
 	platformQueryAdjusters = map[ObservabilityPlatform]QueryAdjuster{GoogleManagedPrometheus: gmpQueryAdjuster}
-	metricPrefixes         = []string{exporters[ksm].getPrefix(), exporters[dcgm].getPrefix()}
-	exportedNamespace      = SnakeCase(exported, Namespace)
-	exportedPod            = SnakeCase(exported, Pod)
+	metricPrefixes         = []string{exporters[ksm].getPrefix(), exporters[Dcgm].getPrefix()}
 	gmpRe                  = buildGmpRegex()
 )
 
@@ -99,7 +96,7 @@ func gmpQueryAdjuster(query string) string {
 		// IMPORTANT CHECK: If we matched an `_over_time` function, we must double-check
 		// that it actually contains a kube-state-metrics metric. This prevents false positives on
 		// complex queries where the regex might over-match.
-		if strings.HasSuffix(match, rightBracket) && strings.Contains(match, overTimeSuffix) {
+		if strings.HasSuffix(match, RightBracket) && strings.Contains(match, overTimeSuffix) {
 			var found bool
 			for _, metricPrefix := range metricPrefixes {
 				if found = strings.Contains(match, metricPrefix); found {
@@ -114,6 +111,6 @@ func gmpQueryAdjuster(query string) string {
 		}
 		// For all valid matches (either the `_over_time` with a kube-state-metrics or DCGM metric,
 		// or a raw kube-state-metrics or DCGM metric), apply the wrapper.
-		return LabelReplace(LabelReplace(match, Namespace, exportedNamespace, HasValue), Pod, exportedPod, HasValue)
+		return LabelReplace(LabelReplace(match, Namespace, ExportedNamespace, HasValue), Pod, ExportedPod, HasValue)
 	})
 }

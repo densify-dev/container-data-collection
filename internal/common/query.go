@@ -10,6 +10,8 @@ type QueryAdjuster func(string) string
 const (
 	labelsPlaceholderBraces = leftBrace + labelsPlaceholder + rightBrace
 	commaLabelsPlaceholder  = Comma + labelsPlaceholder
+	CommentCharacter        = "#"
+	ClusterCommentFmt       = Space + CommentCharacter + Space + ClusterFormat
 )
 
 type clusterLabelsEmbedder interface {
@@ -39,7 +41,7 @@ func getClusterLabelsEmbedder(query string) (cle clusterLabelsEmbedder) {
 	var n int
 	if k := strings.Count(query, rightBrace); k > 0 {
 		qt, n = labeled, k
-	} else if strings.Contains(query, rightBracket) {
+	} else if strings.Contains(query, RightBracket) {
 		qt, n = aggregator, 1
 	} else {
 		qt = plain
@@ -101,7 +103,7 @@ func getComplexQuery(rightBracketIndices, rightBraceIndices []int) clusterLabels
 
 func (cq *complexQuery) embedClusterLabels(query string) (q string, err error) {
 	/*
-		if q, err = embedClusterLabels(query, rightBracket, cq.rightBracketIndices, labelsPlaceholderBraces); err == nil {
+		if q, err = embedClusterLabels(query, RightBracket, cq.rightBracketIndices, labelsPlaceholderBraces); err == nil {
 			q, err = embedClusterLabels(q, rightBrace, cq.rightBraceIndices, commaLabelsPlaceholder)
 		}
 	*/
@@ -158,34 +160,33 @@ func generateOrOrigin(s string, wg WrapperGenerator) string {
 	}
 }
 
-type LabelReplaceCondition int
-
 const (
-	HasValue LabelReplaceCondition = iota
-	Always
+	DefaultFmt = "%v"
 )
 
-const (
-	hasValueStr = ".+"
-	alwaysStr   = ".*"
-)
-
-func (lrc LabelReplaceCondition) String() (s string) {
-	switch lrc {
-	case HasValue:
-		s = hasValueStr
-	case Always:
-		s = alwaysStr
+func FormatRepeatedAuto(format string, v any, other ...any) string {
+	n1 := strings.Count(format, DefaultFmt)
+	n2 := len(other)
+	n := n1 + n2
+	if n == 0 {
+		return fmt.Sprintf(format)
 	}
-	return
-}
-
-func LabelReplace(query, dstLabel, srcLabel string, lrc LabelReplaceCondition) string {
-	return fmt.Sprintf(`label_replace(%s, "%s", "$1", "%s", "(%s)")`, query, dstLabel, srcLabel, lrc.String())
+	args := make([]any, n1, n)
+	for i := range n1 {
+		args[i] = v
+	}
+	if n2 > 0 {
+		args = append(args, other...)
+	}
+	return fmt.Sprintf(format, args...)
 }
 
 func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
+}
+
+func EphemeralExporterLabelReplace(query string) string {
+	return LabelReplace(query, Node, NodeName, Always)
 }
 
 func AggOverTimeQuery(q string, agg string) string {
@@ -201,7 +202,47 @@ func DcgmAggOverTimeQuery(q string, agg string) string {
 // Not clear if this was caused by a GPU which is pegged to 100% or an issue in DCGM exporter
 var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 
+func PercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
+	var suffixPrefix string
+	if metric != Empty {
+		what := JoinComma(onWhat...)
+		var sel string
+		if len(selector) == 2 {
+			sel = fmt.Sprintf(`%s="%s"`, selector[0], selector[1])
+		}
+		suffixPrefix = fmt.Sprintf(` * on (%s) %s{%s}`, what, metric, sel)
+	}
+	return suffixPrefix + " / 100"
+}
+
 func DcgmPercentQuerySuffix(metric string, onWhat ...string) string {
-	what := strings.Join(onWhat, Comma)
-	return fmt.Sprintf(` * on (%s) %s{%s="%s"} / 100`, what, metric, Resource, NvidiaGpuResource)
+	return PercentQuerySuffix(metric, []string{Resource, NvidiaGpuResource}, onWhat...)
+}
+
+var clusterCommentQueryAdjusters map[string]QueryAdjuster
+
+func GetClusterCommentQueryAdapters() map[string]QueryAdjuster {
+	if clusterCommentQueryAdjusters == nil {
+		clusterCommentQueryAdjusters = make(map[string]QueryAdjuster, len(ClusterNames))
+	}
+	for _, cluster := range ClusterNames {
+		clusterCommentQueryAdjusters[cluster] = func(query string) string {
+			return query + fmt.Sprintf(ClusterCommentFmt, cluster)
+		}
+	}
+	return clusterCommentQueryAdjusters
+}
+
+func ExcludeQueryByClusterComment(cluster string, query string) bool {
+	return !strings.HasSuffix(query, fmt.Sprintf(ClusterCommentFmt, cluster))
+}
+
+// SplitQuery separates a query into a trimmed netQuery and a comment.
+func SplitQuery(query string) (netQuery string, comment string) {
+	before, after, found := strings.Cut(query, CommentCharacter)
+	if found {
+		comment = Space + CommentCharacter + after
+	}
+	netQuery = strings.TrimRight(before, SpaceTab)
+	return
 }

@@ -149,7 +149,7 @@ func Metrics() {
 		query = `kube_node_status_allocatable_pods{}`
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	}
-	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests)
+	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageLimits, common.EphemeralStorageRequests)
 
 	mh.name = common.Limits
 	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{}`, `) by (node, resource)`)
@@ -181,7 +181,7 @@ func Metrics() {
 	writeAttributes()
 
 	// get the reservation percent metrics
-	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent}
+	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent, common.EphemeralStorageReservationPercent}
 	var rpCoreMetrics = []*reservationPercentQuery{
 		{"kube_pod_container_resource_requests", common.FilterTerminatedContainersClause},
 		{"kube_node_status_allocatable", common.Empty},
@@ -191,14 +191,17 @@ func Metrics() {
 		false: `%s_%s{}%s`,
 	}
 	var rpArgs = map[bool][]string{
-		true:  {"cpu", "memory"},
-		false: {"cpu_cores", "memory_bytes"},
+		true:  {"cpu", "memory", "ephemeral_storage"},
+		false: {"cpu_cores", "memory_bytes", ""},
 	}
 
 	qw := simpleQueryWrapper(common.Node)
 	for _, f := range common.FoundIndicatorCounter(indicators, common.Requests) {
 		q := make([]string, len(rpCoreMetrics))
 		for i, wmh := range wmhs {
+			if rpArgs[f][i] == "" {
+				continue
+			}
 			for j, rpcm := range rpCoreMetrics {
 				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.clause))
 			}
@@ -209,6 +212,17 @@ func Metrics() {
 
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+
+	if HasEphemeralStorageExporter(range5Min) {
+		utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
+		wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
+		for baseQuery, wmh := range wmhm {
+			query := qw.Query.Wrap(baseQuery)
+			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
+		}
+	} else {
+		common.LogAll(1, common.Info, "entity=%s Ephemeral storage exporter metrics not present for any cluster", common.NodeEntityKind)
+	}
 
 	if HasDcgmExporter(range5Min) {
 		query = qw.AvgQuery.Wrap(common.SafeDcgmGpuUtilizationQuery)
@@ -401,11 +415,16 @@ const (
 
 var once sync.Once
 
+func pivotQuery(query string) string {
+	return fmt.Sprintf("max(%s) by (%s)", query, common.Node)
+}
+
 func DetermineExporters(range5Min *v1.Range) {
 	once.Do(func() {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
-		dcgmExporterPivotQuery := fmt.Sprintf("max(%s) by (%s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"), common.Node)
-		_, _ = common.CollectAndProcessMetric(dcgmExporterPivotQuery, range5Min, determineDcgmExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_sm_utilization_percent{}"), range5Min, determineKubexGpuExporter)
 	})
 }
 
@@ -434,11 +453,31 @@ func determineNodeExporter(cluster string, result model.Matrix) {
 	}
 }
 
+var gpuExporters = make(map[string][]string)
+
 var dcgmExporterIndicators = make(map[string]bool)
 
 func determineDcgmExporter(cluster string, result model.Matrix) {
 	if l := result.Len(); l > 0 {
 		dcgmExporterIndicators[cluster] = true
+		gpuExporters[common.Dcgm] = append(gpuExporters[common.Dcgm], cluster)
+	}
+}
+
+var ephemeralStorageExporterIndicators = make(map[string]bool)
+
+func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		ephemeralStorageExporterIndicators[cluster] = true
+	}
+}
+
+var kubexGpuExporterIndicators = make(map[string]bool)
+
+func determineKubexGpuExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		kubexGpuExporterIndicators[cluster] = true
+		gpuExporters[common.KubexGpu] = append(gpuExporters[common.KubexGpu], cluster)
 	}
 }
 
@@ -452,6 +491,46 @@ func HasNodeExporter(range5Min *v1.Range) bool {
 func HasDcgmExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(dcgmExporterIndicators) > 0
+}
+
+// HasEphemeralStorageExporter returns true if DCGM exporter metrics are present for any cluster
+func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(ephemeralStorageExporterIndicators) > 0
+}
+
+// HasKubexGpuExporter returns true if DCGM exporter metrics are present for any cluster
+func HasKubexGpuExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(kubexGpuExporterIndicators) > 0
+}
+
+func GetGpuExporters(range5Min *v1.Range) map[string][]string {
+	DetermineExporters(range5Min)
+	return gpuExporters
+}
+
+var gpuExportersOrdered = []string{common.KubexGpu, common.Dcgm}
+
+func DetermineGpuExporter(range5Min *v1.Range) (s string) {
+	ges := GetGpuExporters(range5Min)
+	for _, ge := range gpuExportersOrdered {
+		if len(ges[ge]) > 0 {
+			s = ge
+			break
+		}
+	}
+	return
+}
+
+func GetGpuExporterType(range5Min *v1.Range, cluster string) (s string) {
+	DetermineExporters(range5Min)
+	if kubexGpuExporterIndicators[cluster] {
+		s = common.KubexGpu
+	} else if dcgmExporterIndicators[cluster] {
+		s = common.Dcgm
+	}
+	return
 }
 
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
@@ -527,15 +606,18 @@ func SumToAverage(query string) string {
 }
 
 const (
-	memSReclaimable                 = "node_memory_SReclaimable_bytes"
-	memBaseQuery                    = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
-	memActualQueryFmt               = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}%s)"
-	memBaseWsQuery                  = `container_memory_working_set_bytes{id="/"}`
-	k8sIoHostname                   = "kubernetes_io_hostname"
-	utilizationFmt                  = `((%s) / on (%s) %s) * 100`
-	utilizationBaseQueryTotal       = `node_memory_MemTotal_bytes{}`
-	utilizationBaseQueryAllocatable = `kube_node_status_allocatable{resource="memory"}`
+	memSReclaimable                          = "node_memory_SReclaimable_bytes"
+	memBaseQuery                             = "node_memory_MemTotal_bytes{} - node_memory_MemFree_bytes{}"
+	memActualQueryFmt                        = "node_memory_MemTotal_bytes{} - (node_memory_MemFree_bytes{} + node_memory_Cached_bytes{} + node_memory_Buffers_bytes{}%s)"
+	memBaseWsQuery                           = `container_memory_working_set_bytes{id="/"}`
+	k8sIoHostname                            = "kubernetes_io_hostname"
+	utilizationFmt                           = `((%s) / on (%s) %s) * 100`
+	utilizationBaseQueryTotal                = `node_memory_MemTotal_bytes{}`
+	utilizationBaseQueryAllocatable          = `kube_node_status_allocatable{resource="memory"}`
+	utilizationBaseQueryEphemeralAllocatable = `kube_node_status_allocatable{resource="ephemeral_storage"}`
 )
+
+var ephemeralStorageBaseQuery = common.EphemeralExporterLabelReplace(`ephemeral_storage_node_capacity{} - ephemeral_storage_node_available{}`)
 
 var memActualAdditionalMetrics string
 

@@ -3,10 +3,11 @@ package container
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
 	"os"
 	"strings"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/densify-dev/container-data-collection/internal/node"
 )
 
 type namespacesWrite func(name string, cluster map[string]*namespace)
@@ -116,7 +117,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,GpuLimitFloat,GpuRequestFloat,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy,EphemeralStorageRequest,EphemeralStorageLimit"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -141,6 +142,13 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 				}
 				values := []int{c.cpuLimit, c.cpuRequest, c.memLimit, c.memRequest, c.gpuLimit, c.gpuRequest}
 				for _, value := range values {
+					if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
+						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+						return
+					}
+				}
+				floatValues := []float64{c.gpuLimitFloat, c.gpuRequestFloat}
+				for _, value := range floatValues {
 					if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {
 						common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 						return
@@ -189,7 +197,15 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVStringValue(attributeWrite, c.gpuSharingStrategy, true); err != nil {
+				if err = common.PrintCSVStringValue(attributeWrite, c.gpuSharingStrategy, false); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+				if err = common.PrintCSVNumberValue(attributeWrite, c.ephemeralStorageRequest, false); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+				if err = common.PrintCSVNumberValue(attributeWrite, c.ephemeralStorageLimit, true); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
