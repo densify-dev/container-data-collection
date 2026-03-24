@@ -178,6 +178,7 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
+	GpuModel              = SnakeCase(Gpu, Model)
 	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
 	NodeName              = SnakeCase(Node, Name)
 	PodName               = SnakeCase(Pod, Name)

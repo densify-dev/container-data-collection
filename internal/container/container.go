@@ -510,6 +510,10 @@ func Metrics() {
 	}
 
 	if node.HasKubexGpuExporter(range5Min) {
+		mh.metric = common.GpuMemoryTotal
+		query = fmt.Sprintf("sum(kubex_gpu_container_memory_total_bytes{} / %d) by (namespace, pod, container, %s, %s)", common.Mib, common.Node, common.GpuModel)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
 		// need to get limits & requests using specific queries
 		mh.metric = common.GpuFraction
 		query = fmt.Sprintf("sum(kubex_gpu_fraction{}%s) by (pod,namespace,container)", fstsq)

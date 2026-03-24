@@ -232,9 +232,14 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.gpuMemCount++
 			c.gpuMemTotal += int(value)
 			// also get the GPU model name && sharing strategy
-			concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
-			np := &nodeProvider{cluster: cluster}
-			concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
+			switch node.GetGpuExporterType(range5Min, cluster) {
+			case common.Dcgm:
+				concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
+				np := &nodeProvider{cluster: cluster}
+				concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
+			case common.KubexGpu:
+				concatenateValue(ss, common.GpuModel, &c.gpuModel, nil, nil)
+			}
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
