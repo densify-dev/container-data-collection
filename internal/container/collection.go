@@ -216,6 +216,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.gpuRequest = int(value)
 				c.gpuLimitFloat = value
 				c.gpuRequestFloat = value
+				c.gpuSharingStrategy = kaiScheduler
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			}

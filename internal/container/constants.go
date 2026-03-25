@@ -37,6 +37,7 @@ const (
 	qos          = "qos"
 	class        = "class"
 	hpaSeparator = "###"
+	kaiScheduler = "kai-scheduler"
 )
 
 var (
