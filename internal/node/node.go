@@ -424,7 +424,7 @@ func DetermineExporters(range5Min *v1.Range) {
 		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
-		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_sm_utilization_percent{}"), range5Min, determineKubexGpuExporter)
+		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_requests{}"), range5Min, determineKubexGpuExporter)
 	})
 }
 

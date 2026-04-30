@@ -38,6 +38,7 @@ const (
 	class        = "class"
 	hpaSeparator = "###"
 	kaiScheduler = "kai-scheduler"
+	id           = "id"
 )
 
 var (
@@ -62,4 +63,5 @@ var (
 	metricTargetTypeLabel = common.SnakeCase(common.Metric, target, common.Type)
 	qosClass              = common.DromedaryCase(qos, class)
 	qosClassLabel         = common.SnakeCase(qosClass)
+	containerIdLabel      = common.SnakeCase(common.Container, id)
 )

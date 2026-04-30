@@ -200,9 +200,10 @@ const (
 var (
 	Gpus              = Plural(Gpu)
 	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
+	GpuRequest        = CamelCase(Gpu, Request)
+	GpuLimit          = CamelCase(Gpu, Limit)
 	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
 	NamePrefix        = SnakeCase(Name, Prefix)
-	GpuFraction       = CamelCase(Gpu, Fraction)
 )
 
 func Join(sep string, elements ...string) string {
