@@ -872,10 +872,8 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 		{
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
 			baseQuery: map[string]string{
-				common.Dcgm: "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
-				common.KubexGpu: fmt.Sprintf("(%s or %s)",
-					makeKubexGpuQuery("kubex_gpu_container_memory_utilization_percent_seconds_total", common.Avg, sampleRate),
-					makeKubexGpuQuery("kubex_gpu_container_memory_footprint_percent", common.Avg, 0)),
+				common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_memory_footprint_percent", common.Avg, 0),
 			},
 		},
 		{
