@@ -1,5 +1,9 @@
 # Changelog
 
+> **Note:** As of version 4.1.0, we are no longer tracking changes in this file. Please refer to GitHub's native release notes and change comparisons:
+> - Latest release: https://github.com/densify-dev/container-data-collection/releases/tag/v4.4.0
+> - Detailed comparison: https://github.com/densify-dev/container-data-collection/compare/v4.1.0...v4.4.0
+
 Version 4 introduces significant updates of Densify Container Data Collection. It resides in a new [Github repository](https://github.com/densify-dev/container-data-collection), which replaces the [versions 1-3 repository](https://github.com/densify-dev/Container-Optimization-Data-Forwarder), to be deprecated on June 30th, 2024.
 
 This file documents the changes in both repositories. Those in this repository starts with the `4.0.0-beta` release.
