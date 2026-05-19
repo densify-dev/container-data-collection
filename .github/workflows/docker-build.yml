@@ -115,7 +115,7 @@ jobs:
           only-severities: 'critical,high'
           exit-code: true
           only-fixed: true
-          sarif_file: 'docker-scout-results.sarif'
+          sarif-file: 'docker-scout-results.sarif'
 
       - name: Upload Docker Scout scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
