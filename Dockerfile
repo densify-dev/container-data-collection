@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=alpine
 
-FROM golang:bookworm AS builder
+FROM golang:trixie AS builder
 # Enable Docker BuildKit automatic platform ARGs
 ARG TARGETARCH
 ARG VERSION

@@ -85,7 +85,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
           format: 'sarif'
@@ -93,12 +93,12 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Trivy vulnerability scanner (table output)
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
           format: 'table'
@@ -106,6 +106,22 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
+
+      - name: Run Docker Scout vulnerability scanner
+        uses: docker/scout-action@v1.21.0
+        with:
+          command: 'cves'
+          image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
+          only-severities: 'critical,high'
+          exit-code: true
+          only-fixed: true
+          sarif-file: 'docker-scout-results.sarif'
+
+      - name: Upload Docker Scout scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('docker-scout-results.sarif') != ''
+        with:
+          sarif_file: 'docker-scout-results.sarif'
 
       - name: Generate SBOM with Syft
         uses: anchore/sbom-action@v0
