@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -115,12 +115,11 @@ jobs:
           only-severities: 'critical,high'
           exit-code: true
           only-fixed: true
-          format: 'sarif'
-          output: 'docker-scout-results.sarif'
+          sarif_file: 'docker-scout-results.sarif'
 
       - name: Upload Docker Scout scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('docker-scout-results.sarif') != ''
         with:
           sarif_file: 'docker-scout-results.sarif'
 
