@@ -505,7 +505,7 @@ func HasDcgmExporter(range5Min *v1.Range) bool {
 	return len(dcgmExporterIndicators) > 0
 }
 
-// HasKubexGpuExporter returns true if DCGM exporter metrics are present for any cluster
+// HasKubexGpuExporter returns true if Kubex GPU exporter metrics are present for any cluster
 func HasKubexGpuExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(kubexGpuExporterIndicators) > 0
