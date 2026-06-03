@@ -14,7 +14,7 @@ func K8sSnakeCase(elements ...string) string {
 
 // semconv labels
 var (
-	SemcomvNamespaceName = K8sSnakeCase(Namespace, Name)
+	SemconvNamespaceName = K8sSnakeCase(Namespace, Name)
 	SemconvKind          = K8sSnakeCase(Kind)
 	SemconvOwnerName     = K8sSnakeCase(Owner, Name)
 	SemconvContainerName = K8sSnakeCase(Container, Name)

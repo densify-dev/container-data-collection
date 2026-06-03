@@ -492,7 +492,7 @@ func Metrics() {
 	if node.HasBeylaExporter(range5Min) {
 		mh.metric = runtime
 		mh.isOTelMetric = true
-		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemcomvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
+		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 		mh.isOTelMetric = false
 	}

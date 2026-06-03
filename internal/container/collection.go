@@ -167,9 +167,9 @@ func getContainer(cluster string, ss *model.SampleStream) (c *container, cwp *co
 
 func getOTelContainer(cluster string, ss *model.SampleStream) (c *container, ok bool) {
 	var vals map[string]string
-	if vals, ok = common.GetLabelsValues(ss, []string{common.SemcomvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName}); ok {
+	if vals, ok = common.GetLabelsValues(ss, []string{common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName}); ok {
 		var ns *namespace
-		nsName := vals[common.SemcomvNamespaceName]
+		nsName := vals[common.SemconvNamespaceName]
 		if ns, ok = namespaces[cluster][nsName]; ok {
 			var obj *k8sObject
 			objId := &objectId{kind: vals[common.SemconvKind], name: vals[common.SemconvOwnerName]}
