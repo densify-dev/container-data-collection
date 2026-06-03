@@ -9,7 +9,7 @@ import (
 
 // RuntimeDetails will be enriched in the future when we get specific details (e.g. GC settings)
 // for each specific Runtime.
-// The full list of potentials runtimes is at https://github.com/open-telemetry/opentelemetry-go/blob/main/semconv/v1.38.0/attribute_group.go#L14059
+// The full list of potential runtimes is at https://github.com/open-telemetry/opentelemetry-go/blob/main/semconv/v1.38.0/attribute_group.go#L14059
 // (the semconv version may change with https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/)
 type RuntimeDetails interface {
 	runtimeDetails()
