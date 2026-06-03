@@ -122,6 +122,11 @@ const (
 	ExcComment  = "exclude-by-cluster-comment"
 	Prefix      = "prefix"
 	Fraction    = "fraction"
+	K8s         = "k8s"
+	Telemetry   = "telemetry"
+	Sdk         = "sdk"
+	Language    = "language"
+	Survey      = "survey"
 )
 
 // owner kind labels
@@ -186,6 +191,7 @@ var (
 	ExportedContainer     = SnakeCase(Exported, Container)
 	ExportedNamespace     = SnakeCase(Exported, Namespace)
 	ExportedPod           = SnakeCase(Exported, Pod)
+	SurveyInfo            = SnakeCase(Survey, InfoSt)
 )
 
 // GPU consts and vars

@@ -109,7 +109,8 @@ func makeLabelHolders() []*labelHolder {
 var clusterLabelHolders = make(map[string]*labelHolder)
 
 type metricHolder struct {
-	metric string
+	metric       string
+	isOTelMetric bool
 }
 
 var metricRequireSameObject = map[string]bool{createTime: true, common.CurrentSizeName: true}
@@ -164,9 +165,32 @@ func getContainer(cluster string, ss *model.SampleStream) (c *container, cwp *co
 	return
 }
 
+func getOTelContainer(cluster string, ss *model.SampleStream) (c *container, ok bool) {
+	var vals map[string]string
+	if vals, ok = common.GetLabelsValues(ss, []string{common.SemcomvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName}); ok {
+		var ns *namespace
+		nsName := vals[common.SemcomvNamespaceName]
+		if ns, ok = namespaces[cluster][nsName]; ok {
+			var obj *k8sObject
+			objId := &objectId{kind: vals[common.SemconvKind], name: vals[common.SemconvOwnerName]}
+			if obj, ok = ns.objects[strings.ToLower(objId.Key(nsName))]; ok {
+				c, ok = obj.containers[vals[common.SemconvContainerName]]
+			}
+		}
+	}
+	return
+}
+
 func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) {
 	for _, ss := range result {
-		c, cwp, ok := getContainer(cluster, ss)
+		var c *container
+		var cwp *containerWorkloadProducer
+		var ok bool
+		if mh.isOTelMetric {
+			c, ok = getOTelContainer(cluster, ss)
+		} else {
+			c, cwp, ok = getContainer(cluster, ss)
+		}
 		if !ok {
 			continue
 		}
@@ -260,6 +284,11 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.restarts += int(value)
 		case powerSt:
 			c.powerState = powerState(value)
+		case runtime:
+			var lang string
+			if lang, ok = common.GetLabelValue(ss, common.TelemetrySdkLanguage); ok {
+				c.runtimes.addRuntime(&Runtime{Name: lang})
+			}
 		}
 	}
 }

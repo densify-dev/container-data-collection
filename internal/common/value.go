@@ -1,6 +1,7 @@
 package common
 
 import (
+	"hash/fnv"
 	"strconv"
 
 	"github.com/prometheus/common/model"
@@ -101,4 +102,15 @@ func setValue[V any](cluster string, target *V, key, value string) {
 	default:
 		LogCluster(1, Error, ClusterFormat+" unknown type %T for key %s and value %s in labels", cluster, true, cluster, t, key, value)
 	}
+}
+
+var delimiter = []byte{0}
+
+func Fingerprint(strs []string) uint64 {
+	h := fnv.New64a()
+	for _, str := range strs {
+		_, _ = h.Write([]byte(str))
+		_, _ = h.Write(delimiter)
+	}
+	return h.Sum64()
 }
