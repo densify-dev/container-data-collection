@@ -413,7 +413,10 @@ const (
 	HasInstanceLabelOther  = "instance_label_node_name" // "node" label is absent, "instance" label has a different format and assumed to be node name
 )
 
-var once sync.Once
+var (
+	once            sync.Once
+	beylaPivotQuery = fmt.Sprintf("max(%s%s) by (%s)", common.SurveyInfo, common.Braces, common.SemconvNodeName)
+)
 
 func pivotQuery(query string) string {
 	return fmt.Sprintf("max(%s) by (%s)", query, common.Node)
@@ -425,6 +428,7 @@ func DetermineExporters(range5Min *v1.Range) {
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
 		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_requests{}"), range5Min, determineKubexGpuExporter)
+		_, _ = common.CollectAndProcessMetric(beylaPivotQuery, range5Min, determineBeylaExporter)
 	})
 }
 
@@ -464,6 +468,15 @@ func determineDcgmExporter(cluster string, result model.Matrix) {
 	}
 }
 
+var kubexGpuExporterIndicators = make(map[string]bool)
+
+func determineKubexGpuExporter(cluster string, result model.Matrix) {
+	if l := result.Len(); l > 0 {
+		kubexGpuExporterIndicators[cluster] = true
+		gpuExporters[common.KubexGpu] = append(gpuExporters[common.KubexGpu], cluster)
+	}
+}
+
 var ephemeralStorageExporterIndicators = make(map[string]bool)
 
 func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
@@ -472,12 +485,11 @@ func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
 	}
 }
 
-var kubexGpuExporterIndicators = make(map[string]bool)
+var beylaExporterIndicators = make(map[string]bool)
 
-func determineKubexGpuExporter(cluster string, result model.Matrix) {
+func determineBeylaExporter(cluster string, result model.Matrix) {
 	if l := result.Len(); l > 0 {
-		kubexGpuExporterIndicators[cluster] = true
-		gpuExporters[common.KubexGpu] = append(gpuExporters[common.KubexGpu], cluster)
+		beylaExporterIndicators[cluster] = true
 	}
 }
 
@@ -493,13 +505,7 @@ func HasDcgmExporter(range5Min *v1.Range) bool {
 	return len(dcgmExporterIndicators) > 0
 }
 
-// HasEphemeralStorageExporter returns true if DCGM exporter metrics are present for any cluster
-func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(ephemeralStorageExporterIndicators) > 0
-}
-
-// HasKubexGpuExporter returns true if DCGM exporter metrics are present for any cluster
+// HasKubexGpuExporter returns true if Kubex GPU exporter metrics are present for any cluster
 func HasKubexGpuExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(kubexGpuExporterIndicators) > 0
@@ -531,6 +537,18 @@ func GetGpuExporterType(range5Min *v1.Range, cluster string) (s string) {
 		s = common.Dcgm
 	}
 	return
+}
+
+// HasEphemeralStorageExporter returns true if ephemeral storage exporter metrics are present for any cluster
+func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(ephemeralStorageExporterIndicators) > 0
+}
+
+// HasBeylaExporter returns true if Beyla exporter metrics are present for any cluster
+func HasBeylaExporter(range5Min *v1.Range) bool {
+	DetermineExporters(range5Min)
+	return len(beylaExporterIndicators) > 0
 }
 
 var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}

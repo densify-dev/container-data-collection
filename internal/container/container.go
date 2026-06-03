@@ -144,6 +144,7 @@ type container struct {
 	powerState                     powerState
 	name                           string
 	gpuModel, gpuSharingStrategy   string
+	runtimes                       *Runtimes
 	labelMap                       map[string]string
 }
 
@@ -174,6 +175,7 @@ func (htm *hpaTargetMetric) String() (s string) {
 	}
 	return
 }
+
 func (htm *hpaTargetMetric) Order() (n int) {
 	switch strings.ToLower(htm.Name) {
 	case common.Memory:
@@ -408,6 +410,7 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			ephemeralStorageRequest: common.UnknownValue,
 			name:                    containerName,
 			labelMap:                make(map[string]string),
+			runtimes:                &Runtimes{runtimes: make([]*Runtime, 0), fingerprints: make(map[uint64]bool)},
 		}
 	}
 }
@@ -485,6 +488,14 @@ func Metrics() {
 	mh.metric = powerSt
 	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
+	if node.HasBeylaExporter(range5Min) {
+		mh.metric = runtime
+		mh.isOTelMetric = true
+		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+		mh.isOTelMetric = false
+	}
 
 	fstsq := fmt.Sprintf(" unless on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
@@ -720,7 +731,7 @@ func Metrics() {
 	getWorkload(wq)
 
 	wq.metricName = common.WorkingSet
-	wq.baseQuery = fmt.Sprintf(`sum(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`max(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
 	if node.HasEphemeralStorageExporter(range5Min) {

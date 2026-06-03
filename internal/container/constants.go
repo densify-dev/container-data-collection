@@ -39,6 +39,7 @@ const (
 	hpaSeparator = "###"
 	kaiScheduler = "kai-scheduler"
 	id           = "id"
+	runtime      = "runtime"
 )
 
 var (
