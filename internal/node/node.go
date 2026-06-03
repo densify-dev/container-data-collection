@@ -539,7 +539,7 @@ func GetGpuExporterType(range5Min *v1.Range, cluster string) (s string) {
 	return
 }
 
-// HasEphemeralStorageExporter returns true if DCGM exporter metrics are present for any cluster
+// HasEphemeralStorageExporter returns true if ephemeral storage exporter metrics are present for any cluster
 func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
 	DetermineExporters(range5Min)
 	return len(ephemeralStorageExporterIndicators) > 0
