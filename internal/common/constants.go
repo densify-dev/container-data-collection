@@ -127,6 +127,11 @@ const (
 	Sdk         = "sdk"
 	Language    = "language"
 	Survey      = "survey"
+	standard    = "standard"
+	initSt      = "init"
+	Regular     = "Regular"
+	native      = "native"
+	sidecar     = "sidecar"
 )
 
 // owner kind labels
@@ -192,6 +197,8 @@ var (
 	ExportedNamespace     = SnakeCase(Exported, Namespace)
 	ExportedPod           = SnakeCase(Exported, Pod)
 	SurveyInfo            = SnakeCase(Survey, InfoSt)
+	StandardInit          = CamelCase(standard, initSt)
+	NativeSidecar         = CamelCase(native, sidecar, initSt)
 )
 
 // GPU consts and vars

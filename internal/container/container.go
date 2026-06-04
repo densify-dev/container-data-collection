@@ -78,6 +78,26 @@ func (ps powerState) String() (s string) {
 	return
 }
 
+type containerType int
+
+const (
+	regularContainer containerType = iota
+	initStandardContainer
+	initNativeSidecar
+)
+
+func (ct containerType) String() (s string) {
+	switch ct {
+	case regularContainer:
+		s = common.Regular
+	case initStandardContainer:
+		s = common.StandardInit
+	case initNativeSidecar:
+		s = common.NativeSidecar
+	}
+	return
+}
+
 type QosClass int
 
 const (
@@ -142,6 +162,7 @@ type container struct {
 	ephemeralStorageLimit, ephemeralStorageRequest int
 	gpuLimitFloat, gpuRequestFloat float64
 	powerState                     powerState
+	containerType                  containerType
 	name                           string
 	gpuModel, gpuSharingStrategy   string
 	runtimes                       *Runtimes
@@ -393,6 +414,10 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			}
 			ns.objects[ownerKey] = obj
 		}
+		ct := regularContainer
+		if restartPolicy, hasRestartPolicy := common.GetLabelValue(ss, restartPolicyLabel); hasRestartPolicy && restartPolicy == always {
+			ct = initNativeSidecar
+		}
 		obj.containers[containerName] = &container{
 			memory:                  common.UnknownValue,
 			gpuMemTotal:             common.UnknownValue,
@@ -406,6 +431,7 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			gpuRequest:              common.UnknownValue,
 			gpuRequestFloat:         common.UnknownValueFloat,
 			powerState:              common.UnknownValue,
+			containerType:           ct,
 			ephemeralStorageLimit:   common.UnknownValue,
 			ephemeralStorageRequest: common.UnknownValue,
 			name:                    containerName,
@@ -442,6 +468,10 @@ func getOwnerQuery(metricName string, owned bool) (query string) {
 	return
 }
 
+func initContainersQuery(extraLabels ...string) string {
+	return fmt.Sprintf(`max(kube_pod_init_container_info{%s="%s"}) by (%s, %s, %s, %s)`, restartPolicyLabel, always, common.Container, common.Pod, common.Namespace, common.JoinComma(extraLabels...))
+}
+
 var range5Min *v1.Range
 
 // Metrics function to collect data related to containers.
@@ -463,7 +493,7 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, rsth.getOwners)
 	query = fmt.Sprintf(`sum(%s) by (namespace, job_name, owner_name, owner_kind)`, getOwnerQuery("kube_job_owner", true))
 	_, _ = common.CollectAndProcessMetric(query, range5Min, jth.getOwners)
-	query = `max(kube_pod_container_info{}) by (container, pod, namespace)`
+	query = fmt.Sprintf(`max(kube_pod_container_info{}) by (%s, %s, %s) or %s`, common.Container, common.Pod, common.Namespace, initContainersQuery(restartPolicyLabel))
 	if n, err = common.CollectAndProcessMetric(query, range5Min, addContainerAndOwners); err != nil || n == 0 {
 		// error already handled
 		return
@@ -483,8 +513,8 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
-	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container))",
-		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
+	stsq := fmt.Sprintf(`sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container) or sum(sum_over_time(kube_pod_init_container_info{restart_policy="Always"}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_init_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_init_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_init_container_info{}[%dm])/100000) by (namespace,pod,container))`,
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	mh.metric = powerSt
 	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
@@ -499,7 +529,7 @@ func Metrics() {
 
 	fstsq := fmt.Sprintf(" unless on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
-	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource)", fstsq)
+	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource) or sum(kube_pod_init_container_resource_limits{}) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuLimit
 		query = fmt.Sprintf("sum(kube_pod_container_resource_limits_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
@@ -510,7 +540,7 @@ func Metrics() {
 	}
 
 	mh.metric = common.Requests
-	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource)", fstsq)
+	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource) or sum(kube_pod_init_container_resource_requests{}) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuRequest
 		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
@@ -534,7 +564,7 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
-	query = `kube_pod_container_info{}`
+	query = `kube_pod_container_info{} or kube_pod_init_container_info{restart_policy="Always"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
 
 	// pod metrics
@@ -545,7 +575,7 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, pth.getObjectMetricString)
 
 	mh.metric = restarts
-	query = `sum(kube_pod_container_status_restarts_total{}) by (pod,namespace,container)`
+	query = `sum(kube_pod_container_status_restarts_total{}) by (pod,namespace,container) or sum(kube_pod_init_container_status_restarts_total{}) by (pod,namespace,container)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
 	mh.metric = createTime
@@ -803,7 +833,8 @@ func Metrics() {
 	wq.hasSuffix = false
 	wq.aggregators = map[string]string{common.Sum: common.Empty}
 	wq.aggregatorNames = map[string]string{common.Sum: common.Max}
-	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s)`, common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s) or (max((round(increase(kube_pod_init_container_status_restarts_total{}[%dm]),1))) by (instance,pod,namespace,container) and (%s == 1))`,
+		common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx], common.Params.Collection.SampleRate, initContainersQuery(common.Instance))
 	getWorkload(wq)
 
 	spmxr := &hpaWorkloadQuery{
