@@ -62,8 +62,9 @@ type node struct {
 var nodes = make(map[string]map[string]*node)
 
 type reservationPercentQuery struct {
-	metric string
-	clause string
+	metrics  []string
+	queryFmt string
+	clause   string
 }
 
 // Metrics a global func for collecting node level metrics in prometheus
@@ -152,7 +153,7 @@ func Metrics() {
 	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageLimits, common.EphemeralStorageRequests)
 
 	mh.name = common.Limits
-	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{}`, `) by (node, resource)`)
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{} or (kube_pod_init_container_resource_limits{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`, `) by (node, resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuLimit
@@ -164,7 +165,7 @@ func Metrics() {
 	}
 
 	mh.name = common.Requests
-	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests{}`, `) by (node,resource)`)
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`, `) by (node,resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuRequest
@@ -183,12 +184,16 @@ func Metrics() {
 	// get the reservation percent metrics
 	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent, common.EphemeralStorageReservationPercent}
 	var rpCoreMetrics = []*reservationPercentQuery{
-		{"kube_pod_container_resource_requests", common.FilterTerminatedContainersClause},
-		{"kube_node_status_allocatable", common.Empty},
+		{metrics: []string{"kube_pod_container_resource_requests", "kube_pod_init_container_resource_requests"},
+			queryFmt: `%s or (%s * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"}) `,
+			clause:   common.FilterTerminatedContainersClause},
+		{metrics: []string{"kube_node_status_allocatable"},
+			queryFmt: "%s",
+			clause:   common.Empty},
 	}
 	var rpFormats = map[bool]string{
-		true:  `%s{resource="%s"}%s`,
-		false: `%s_%s{}%s`,
+		true:  `%s{resource="%s"}`,
+		false: `%s_%s{}`,
 	}
 	var rpArgs = map[bool][]string{
 		true:  {"cpu", "memory", "ephemeral_storage"},
@@ -203,7 +208,11 @@ func Metrics() {
 				continue
 			}
 			for j, rpcm := range rpCoreMetrics {
-				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpFormats[f], rpcm.metric, rpArgs[f][i], rpcm.clause))
+				ms := make([]any, len(rpcm.metrics))
+				for k, m := range rpcm.metrics {
+					ms[k] = fmt.Sprintf(rpFormats[f], m, rpArgs[f][i])
+				}
+				q[j] = qw.SumQuery.Wrap(fmt.Sprintf(rpcm.queryFmt, ms...) + rpcm.clause)
 			}
 			query = fmt.Sprintf(`(%s / %s) * 100`, q[0], q[1])
 			wmh.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)

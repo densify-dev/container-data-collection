@@ -276,16 +276,16 @@ var qualifiers = []string{common.Limit, common.Request}
 var resourceCoreQueries = map[string]map[bool]map[string]string{
 	common.Limit: {
 		true: {
-			common.Cpu:    `kube_pod_container_resource_limits{resource="cpu"}`,
-			common.Memory: `kube_pod_container_resource_limits{resource="memory"}`},
+			common.Cpu:    `kube_pod_container_resource_limits{resource="cpu"} or (kube_pod_init_container_resource_limits{resource="cpu"} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`,
+			common.Memory: `kube_pod_container_resource_limits{resource="memory"} or (kube_pod_init_container_resource_limits{resource="memory"} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`},
 		false: {
 			common.Cpu:    `kube_pod_container_resource_limits_cpu_cores{}`,
 			common.Memory: `kube_pod_container_resource_limits_memory_bytes{}`},
 	},
 	common.Request: {
 		true: {
-			common.Cpu:    `kube_pod_container_resource_requests{resource="cpu"}`,
-			common.Memory: `kube_pod_container_resource_requests{resource="memory"}`},
+			common.Cpu:    `kube_pod_container_resource_requests{resource="cpu"} or (kube_pod_init_container_resource_requests{resource="cpu"} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`,
+			common.Memory: `kube_pod_container_resource_requests{resource="memory"} or (kube_pod_init_container_resource_requests{resource="memory"} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`},
 		false: {
 			common.Cpu:    `kube_pod_container_resource_requests_cpu_cores{}`,
 			common.Memory: `kube_pod_container_resource_requests_memory_bytes{}`},

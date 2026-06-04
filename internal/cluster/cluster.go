@@ -2,11 +2,12 @@ package cluster
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/kubernetes"
 	"github.com/densify-dev/container-data-collection/internal/node"
 	"github.com/prometheus/common/model"
-	"os"
 )
 
 type cluster struct {
@@ -166,7 +167,7 @@ func Metrics() {
 	var query string
 	range5Min := common.TimeRange()
 	cmh := &clusterMetricHolder{metric: common.Limits}
-	query = `sum(kube_pod_container_resource_limits{}) by (resource)`
+	query = `sum(kube_pod_container_resource_limits{} or (kube_pod_init_container_resource_limits{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})) by (resource)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	if common.Found(indicators, common.Limits, false) {
 		cmh.metric = common.CpuLimit
@@ -177,7 +178,7 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	}
 	cmh.metric = common.Requests
-	query = `sum(kube_pod_container_resource_requests{}) by (resource)`
+	query = `sum(kube_pod_container_resource_requests or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})) by (resource)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	if common.Found(indicators, common.Requests, false) {
 		cmh.metric = common.CpuRequest
