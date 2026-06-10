@@ -288,6 +288,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			var lang string
 			if lang, ok = common.GetLabelValue(ss, common.TelemetrySdkLanguage); ok {
 				c.runtimes.addRuntime(&Runtime{Name: lang})
+				addToLabelMap(model.Metric{runtimeLabel: model.LabelValue(lang)}, c.labelMap, nil)
 			}
 		}
 	}

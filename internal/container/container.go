@@ -503,7 +503,16 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.Container)
 	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
 
-	mh := &metricHolder{metric: common.Memory}
+	mh := &metricHolder{}
+	if node.HasBeylaExporter(range5Min) {
+		mh.metric = runtime
+		mh.isOTelMetric = true
+		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+		mh.isOTelMetric = false
+	}
+
+	mh.metric = common.Memory
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
@@ -518,14 +527,6 @@ func Metrics() {
 	mh.metric = powerSt
 	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
-
-	if node.HasBeylaExporter(range5Min) {
-		mh.metric = runtime
-		mh.isOTelMetric = true
-		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
-		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
-		mh.isOTelMetric = false
-	}
 
 	fstsq := fmt.Sprintf(" unless on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
