@@ -39,6 +39,7 @@ const (
 	runtime             = "runtime"
 	policy              = "policy"
 	always              = "Always"
+	runtimeLabel        = "runtime.kubex.ai"
 )
 
 var (
