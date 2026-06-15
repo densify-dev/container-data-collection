@@ -398,7 +398,8 @@ const (
 	ossm             = "openshift-state-metrics"
 	Dcgm             = "dcgm-exporter"
 	ephemeralStorage = "k8s-ephemeral-storage-metrics"
-	KubexGpu         = "kubex-gpu-exporter"
+	KubexGpu         = "kubex-gpu-process-exporter"
+	Beyla            = "beyla"
 )
 
 type exporter struct {
@@ -481,7 +482,8 @@ func makeExporters() map[string]*exporter {
 	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
 	addExporter(exps, Dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
 	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true)
-	addExporter(exps, KubexGpu, "kubex_gpu_container_sm_utilization_percent", nil, true)
+	addExporter(exps, KubexGpu, "kubex_gpu_container_requests", nil, true)
+	addExporter(exps, Beyla, SurveyInfo, nil, true)
 	return exps
 }
 

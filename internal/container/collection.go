@@ -109,7 +109,8 @@ func makeLabelHolders() []*labelHolder {
 var clusterLabelHolders = make(map[string]*labelHolder)
 
 type metricHolder struct {
-	metric string
+	metric       string
+	isOTelMetric bool
 }
 
 var metricRequireSameObject = map[string]bool{createTime: true, common.CurrentSizeName: true}
@@ -164,9 +165,32 @@ func getContainer(cluster string, ss *model.SampleStream) (c *container, cwp *co
 	return
 }
 
+func getOTelContainer(cluster string, ss *model.SampleStream) (c *container, ok bool) {
+	var vals map[string]string
+	if vals, ok = common.GetLabelsValues(ss, []string{common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName}); ok {
+		var ns *namespace
+		nsName := vals[common.SemconvNamespaceName]
+		if ns, ok = namespaces[cluster][nsName]; ok {
+			var obj *k8sObject
+			objId := &objectId{kind: vals[common.SemconvKind], name: vals[common.SemconvOwnerName]}
+			if obj, ok = ns.objects[strings.ToLower(objId.Key(nsName))]; ok {
+				c, ok = obj.containers[vals[common.SemconvContainerName]]
+			}
+		}
+	}
+	return
+}
+
 func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) {
 	for _, ss := range result {
-		c, cwp, ok := getContainer(cluster, ss)
+		var c *container
+		var cwp *containerWorkloadProducer
+		var ok bool
+		if mh.isOTelMetric {
+			c, ok = getOTelContainer(cluster, ss)
+		} else {
+			c, cwp, ok = getContainer(cluster, ss)
+		}
 		if !ok {
 			continue
 		}
@@ -209,15 +233,19 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.ephemeralStorageRequest = common.IntMiB(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
 			}
-		// GPU requests and limits are the same, populate both
-		case common.GpuFraction:
+		case common.GpuRequest:
+			if node.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
+				c.gpuRequest = int(value)
+				c.gpuRequestFloat = value
+				getKubexGpuSharingStrategy(ss, cluster, c)
+				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
+			}
+		case common.GpuLimit:
 			if node.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
 				c.gpuLimit = int(value)
-				c.gpuRequest = int(value)
 				c.gpuLimitFloat = value
-				c.gpuRequestFloat = value
+				getKubexGpuSharingStrategy(ss, cluster, c)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
-				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			}
 		case common.Memory:
 			c.memory = common.IntMiB(value)
@@ -232,9 +260,14 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.gpuMemCount++
 			c.gpuMemTotal += int(value)
 			// also get the GPU model name && sharing strategy
-			concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
-			np := &nodeProvider{cluster: cluster}
-			concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
+			switch node.GetGpuExporterType(range5Min, cluster) {
+			case common.Dcgm:
+				concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
+				np := &nodeProvider{cluster: cluster}
+				concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
+			case common.KubexGpu:
+				concatenateValue(ss, common.GpuModel, &c.gpuModel, nil, nil)
+			}
 		case common.CpuLimit:
 			c.cpuLimit = common.IntMCores(value)
 			common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
@@ -251,7 +284,22 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.restarts += int(value)
 		case powerSt:
 			c.powerState = powerState(value)
+		case runtime:
+			var lang string
+			if lang, ok = common.GetLabelValue(ss, common.TelemetrySdkLanguage); ok {
+				c.runtimes.addRuntime(&Runtime{Name: lang})
+				addToLabelMap(model.Metric{runtimeLabel: model.LabelValue(lang)}, c.labelMap, nil)
+			}
 		}
+	}
+}
+
+func getKubexGpuSharingStrategy(ss *model.SampleStream, cluster string, c *container) {
+	if gat, f := ss.Metric["gpu_allocation_type"]; f && gat == "KaiScheduler" {
+		c.gpuSharingStrategy = kaiScheduler
+	} else {
+		np := &nodeProvider{cluster: cluster}
+		concatenateValue(ss, common.Node, &c.gpuSharingStrategy, np.getGpuSharingStrategy, nil)
 	}
 }
 

@@ -7,39 +7,43 @@ import (
 const (
 	idSep               = "__"
 	powerSt             = "powerState"
-	restarts            = "restarts"
+	restart             = "restart"
 	noOwnersFoundFormat = common.ClusterFormat + " - no %s owners found"
-)
-
-const (
-	create       = "create"
-	timeSt       = "time"
-	surge        = "surge"
-	unavailable  = "unavailable"
-	metadata     = "metadata"
-	generation   = "generation"
-	spec         = "spec"
-	status       = "status"
-	completion   = "completion"
-	parallelism  = "parallelism"
-	start        = "start"
-	next         = "next"
-	last         = "last"
-	schedule     = "schedule"
-	active       = "active"
-	horizontal   = "horizontal"
-	autoscaler   = "autoscaler"
-	kube         = "kube"
-	rss          = "rss"
-	condition    = "condition"
-	scaling      = "scaling"
-	limited      = "limited"
-	qos          = "qos"
-	class        = "class"
-	hpaSeparator = "###"
+	create              = "create"
+	timeSt              = "time"
+	surge               = "surge"
+	unavailable         = "unavailable"
+	metadata            = "metadata"
+	generation          = "generation"
+	spec                = "spec"
+	status              = "status"
+	completion          = "completion"
+	parallelism         = "parallelism"
+	start               = "start"
+	next                = "next"
+	last                = "last"
+	schedule            = "schedule"
+	active              = "active"
+	horizontal          = "horizontal"
+	autoscaler          = "autoscaler"
+	kube                = "kube"
+	rss                 = "rss"
+	condition           = "condition"
+	scaling             = "scaling"
+	limited             = "limited"
+	qos                 = "qos"
+	class               = "class"
+	hpaSeparator        = "###"
+	kaiScheduler        = "kai-scheduler"
+	id                  = "id"
+	runtime             = "runtime"
+	policy              = "policy"
+	always              = "Always"
+	runtimeLabel        = "runtime.kubex.ai"
 )
 
 var (
+	restarts    = common.Plural(restart)
 	hpaFullName = common.JoinNoSep(horizontal, common.Pod, autoscaler)
 	// ownership labels
 	ownerName = common.SnakeCase(common.Owner, common.Name)
@@ -61,4 +65,6 @@ var (
 	metricTargetTypeLabel = common.SnakeCase(common.Metric, target, common.Type)
 	qosClass              = common.DromedaryCase(qos, class)
 	qosClassLabel         = common.SnakeCase(qosClass)
+	containerIdLabel      = common.SnakeCase(common.Container, id)
+	restartPolicyLabel    = common.SnakeCase(restart, policy)
 )

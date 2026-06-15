@@ -78,6 +78,26 @@ func (ps powerState) String() (s string) {
 	return
 }
 
+type containerType int
+
+const (
+	regularContainer containerType = iota
+	initStandardContainer
+	initNativeSidecar
+)
+
+func (ct containerType) String() (s string) {
+	switch ct {
+	case regularContainer:
+		s = common.Regular
+	case initStandardContainer:
+		s = common.StandardInit
+	case initNativeSidecar:
+		s = common.NativeSidecar
+	}
+	return
+}
+
 type QosClass int
 
 const (
@@ -142,8 +162,10 @@ type container struct {
 	ephemeralStorageLimit, ephemeralStorageRequest int
 	gpuLimitFloat, gpuRequestFloat float64
 	powerState                     powerState
+	containerType                  containerType
 	name                           string
 	gpuModel, gpuSharingStrategy   string
+	runtimes                       *Runtimes
 	labelMap                       map[string]string
 }
 
@@ -174,6 +196,7 @@ func (htm *hpaTargetMetric) String() (s string) {
 	}
 	return
 }
+
 func (htm *hpaTargetMetric) Order() (n int) {
 	switch strings.ToLower(htm.Name) {
 	case common.Memory:
@@ -391,6 +414,10 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			}
 			ns.objects[ownerKey] = obj
 		}
+		ct := regularContainer
+		if restartPolicy, hasRestartPolicy := common.GetLabelValue(ss, restartPolicyLabel); hasRestartPolicy && restartPolicy == always {
+			ct = initNativeSidecar
+		}
 		obj.containers[containerName] = &container{
 			memory:                  common.UnknownValue,
 			gpuMemTotal:             common.UnknownValue,
@@ -404,10 +431,12 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			gpuRequest:              common.UnknownValue,
 			gpuRequestFloat:         common.UnknownValueFloat,
 			powerState:              common.UnknownValue,
+			containerType:           ct,
 			ephemeralStorageLimit:   common.UnknownValue,
 			ephemeralStorageRequest: common.UnknownValue,
 			name:                    containerName,
 			labelMap:                make(map[string]string),
+			runtimes:                &Runtimes{runtimes: make([]*Runtime, 0), fingerprints: make(map[uint64]bool)},
 		}
 	}
 }
@@ -439,6 +468,10 @@ func getOwnerQuery(metricName string, owned bool) (query string) {
 	return
 }
 
+func initContainersQuery(extraLabels ...string) string {
+	return fmt.Sprintf(`max(kube_pod_init_container_info{%s="%s"}) by (%s, %s, %s, %s)`, restartPolicyLabel, always, common.Container, common.Pod, common.Namespace, common.JoinComma(extraLabels...))
+}
+
 var range5Min *v1.Range
 
 // Metrics function to collect data related to containers.
@@ -460,7 +493,7 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, rsth.getOwners)
 	query = fmt.Sprintf(`sum(%s) by (namespace, job_name, owner_name, owner_kind)`, getOwnerQuery("kube_job_owner", true))
 	_, _ = common.CollectAndProcessMetric(query, range5Min, jth.getOwners)
-	query = `max(kube_pod_container_info{}) by (container, pod, namespace)`
+	query = fmt.Sprintf(`max(kube_pod_container_info{}) by (%s, %s, %s) or %s`, common.Container, common.Pod, common.Namespace, initContainersQuery(restartPolicyLabel))
 	if n, err = common.CollectAndProcessMetric(query, range5Min, addContainerAndOwners); err != nil || n == 0 {
 		// error already handled
 		return
@@ -470,7 +503,16 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.Container)
 	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
 
-	mh := &metricHolder{metric: common.Memory}
+	mh := &metricHolder{}
+	if node.HasBeylaExporter(range5Min) {
+		mh.metric = runtime
+		mh.isOTelMetric = true
+		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+		mh.isOTelMetric = false
+	}
+
+	mh.metric = common.Memory
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
@@ -480,15 +522,15 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
-	stsq := fmt.Sprintf("sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container))",
-		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
+	stsq := fmt.Sprintf(`sgn(sum(sum_over_time(kube_pod_container_info{}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_container_info{}[%dm])/100000) by (namespace,pod,container) or sum(sum_over_time(kube_pod_init_container_info{restart_policy="Always"}[%dm])) by (namespace,pod,container) - max(sum_over_time(kube_pod_init_container_status_terminated{}[%dm]) or sum_over_time(kube_pod_init_container_status_terminated_reason{}[%dm]) or sum_over_time(kube_pod_init_container_info{}[%dm])/100000) by (namespace,pod,container))`,
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	mh.metric = powerSt
 	query = stsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
 	fstsq := fmt.Sprintf(" unless on (namespace,pod,container) (%s == 0)", stsq)
 	mh.metric = common.Limits
-	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource)", fstsq)
+	query = fmt.Sprintf("sum(kube_pod_container_resource_limits{}%s) by (pod,namespace,container,resource) or sum(kube_pod_init_container_resource_limits{}) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuLimit
 		query = fmt.Sprintf("sum(kube_pod_container_resource_limits_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
@@ -499,7 +541,7 @@ func Metrics() {
 	}
 
 	mh.metric = common.Requests
-	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource)", fstsq)
+	query = fmt.Sprintf("sum(kube_pod_container_resource_requests{}%s) by (pod,namespace,container,resource) or sum(kube_pod_init_container_resource_requests{}) by (pod,namespace,container,resource)", fstsq)
 	if n, err = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric); err != nil || n < common.NumClusters() {
 		mh.metric = common.CpuRequest
 		query = fmt.Sprintf("sum(kube_pod_container_resource_requests_cpu_cores{}%s) by (pod,namespace,container)", fstsq)
@@ -510,13 +552,20 @@ func Metrics() {
 	}
 
 	if node.HasKubexGpuExporter(range5Min) {
+		mh.metric = common.GpuMemoryTotal
+		query = fmt.Sprintf("(%s / %d)", makeKubexGpuQuery("kubex_gpu_container_memory_total_bytes", common.Sum, 0, common.Node, common.GpuModel), common.Mib)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+
 		// need to get limits & requests using specific queries
-		mh.metric = common.GpuFraction
-		query = fmt.Sprintf("sum(kubex_gpu_fraction{}%s) by (pod,namespace,container)", fstsq)
+		mh.metric = common.GpuRequest
+		query = fmt.Sprintf("max(kubex_gpu_container_requests{}%s) by (pod,namespace,container,gpu_allocation_type)", fstsq)
+		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
+		mh.metric = common.GpuLimit
+		query = fmt.Sprintf("max(kubex_gpu_container_limits{}%s) by (pod,namespace,container,gpu_allocation_type)", fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
-	query = `kube_pod_container_info{}`
+	query = `kube_pod_container_info{} or kube_pod_init_container_info{restart_policy="Always"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getContainerMetricString)
 
 	// pod metrics
@@ -527,7 +576,7 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, pth.getObjectMetricString)
 
 	mh.metric = restarts
-	query = `sum(kube_pod_container_status_restarts_total{}) by (pod,namespace,container)`
+	query = `sum(kube_pod_container_status_restarts_total{}) by (pod,namespace,container) or sum(kube_pod_init_container_status_restarts_total{}) by (pod,namespace,container)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
 	mh.metric = createTime
@@ -713,7 +762,7 @@ func Metrics() {
 	getWorkload(wq)
 
 	wq.metricName = common.WorkingSet
-	wq.baseQuery = fmt.Sprintf(`sum(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`max(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
 	if node.HasEphemeralStorageExporter(range5Min) {
@@ -778,14 +827,15 @@ func Metrics() {
 		common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
 	getWorkload(wq)
 
-	getGpuWorkloads(range5Min, wq)
+	getGpuWorkloads(range5Min, wq, common.Params.Collection.SampleRate)
 
 	wq.metricName = restarts
 	wq.wqwIdx = containerIdx
 	wq.hasSuffix = false
 	wq.aggregators = map[string]string{common.Sum: common.Empty}
 	wq.aggregatorNames = map[string]string{common.Sum: common.Max}
-	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s)`, common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s) or (max((round(increase(kube_pod_init_container_status_restarts_total{}[%dm]),1))) by (instance,pod,namespace,container) and (%s == 1))`,
+		common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx], common.Params.Collection.SampleRate, initContainersQuery(common.Instance))
 	getWorkload(wq)
 
 	spmxr := &hpaWorkloadQuery{
@@ -845,43 +895,57 @@ type gpuWorkloadQuery struct {
 	appendToPrevious bool
 }
 
-var gpuWorkloadQueries = []*gpuWorkloadQuery{
-	{
-		metricName: common.CamelCase(common.Gpu, common.Utilization),
-		baseQuery: map[string]string{
-			common.Dcgm:     common.SafeDcgmGpuUtilizationQuery,
-			common.KubexGpu: "kubex_gpu_container_sm_utilization_percent{}",
+func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
+	return []*gpuWorkloadQuery{
+		{
+			metricName: common.CamelCase(common.Gpu, common.Utilization),
+			baseQuery: map[string]string{
+				common.Dcgm:     common.SafeDcgmGpuUtilizationQuery,
+				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_sm_utilization_percent_seconds_total", common.Avg, sampleRate),
+			},
 		},
-	},
-	{
-		metricName: common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
-		baseQuery: map[string]string{
-			common.Dcgm:     common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
-			common.KubexGpu: common.PercentQuerySuffix(common.Empty, nil, common.Namespace, common.Pod, common.Container),
+		{
+			metricName: common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
+			baseQuery: map[string]string{
+				common.Dcgm:     common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
+				common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_container_requests", nil, common.Namespace, common.Pod, common.Container),
+			},
+			appendToPrevious: true,
 		},
-		appendToPrevious: true,
-	},
-	{
-		metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
-		baseQuery: map[string]string{
-			common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
-			common.KubexGpu: "kubex_gpu_container_memory_footprint_percent{}",
+		{
+			metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
+			baseQuery: map[string]string{
+				common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_memory_footprint_percent", common.Avg, 0),
+			},
 		},
-	},
-	{
-		metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
-		baseQuery: map[string]string{
-			common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
-			common.KubexGpu: fmt.Sprintf("(kubex_gpu_container_memory_bytes{} / %d)", common.Mib),
+		{
+			metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
+			baseQuery: map[string]string{
+				common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
+				common.KubexGpu: fmt.Sprintf("(kubex_gpu_container_memory_bytes{} / %d)", common.Mib),
+			},
 		},
-	},
-	{
-		metricName: common.CamelCase(common.Gpu, common.Power, common.Usage),
-		baseQuery: map[string]string{
-			common.Dcgm: "DCGM_FI_DEV_POWER_USAGE{}",
-			// cannot map the power usage to a specific process
+		{
+			metricName: common.CamelCase(common.Gpu, common.Power, common.Usage),
+			baseQuery: map[string]string{
+				common.Dcgm: "DCGM_FI_DEV_POWER_USAGE{}",
+				// cannot map the power usage to a specific process
+			},
 		},
-	},
+	}
+}
+
+func makeKubexGpuQuery(metric string, agg string, sampleRate uint64, extraLabels ...string) string {
+	fn := fmt.Sprintf("%s%s", metric, common.Braces)
+	if sampleRate > 0 {
+		fn = fmt.Sprintf("rate(%s[%dm])", fn, sampleRate)
+	}
+	labels := []string{common.Namespace, common.Pod, common.Container}
+	labels = append(labels, extraLabels...)
+	byExc := strings.Join(labels, common.Comma)
+	byInc := strings.Join([]string{byExc, containerIdLabel}, common.Comma)
+	return fmt.Sprintf("max by (%s) (%s by (%s) (%s))", byExc, agg, byInc, fn)
 }
 
 var gpuAggregators = []string{common.Avg, common.Max}
@@ -891,11 +955,12 @@ var gpuAggOverTime = map[string]func(string, string) string{
 	common.KubexGpu: common.AggOverTimeQuery,
 }
 
-func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery) {
+func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) {
 	ge := node.DetermineGpuExporter(range5Min)
 	if ge == common.Empty {
 		return
 	}
+	gpuWorkloadQueries := makeGpuWorkloadQueries(sampleRate)
 	wq.aggregatorAsSuffix = true
 	for _, agg := range gpuAggregators {
 		for _, gwq := range gpuWorkloadQueries {

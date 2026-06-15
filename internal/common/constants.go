@@ -122,6 +122,16 @@ const (
 	ExcComment  = "exclude-by-cluster-comment"
 	Prefix      = "prefix"
 	Fraction    = "fraction"
+	K8s         = "k8s"
+	Telemetry   = "telemetry"
+	Sdk         = "sdk"
+	Language    = "language"
+	Survey      = "survey"
+	standard    = "standard"
+	initSt      = "init"
+	Regular     = "Regular"
+	native      = "native"
+	sidecar     = "sidecar"
 )
 
 // owner kind labels
@@ -178,6 +188,7 @@ var (
 	Events                = Plural(Event)
 	Seconds               = Plural(Second)
 	ModelName             = DromedaryCase(Model, Name)
+	GpuModel              = SnakeCase(Gpu, Model)
 	EphemeralStorage      = SnakeCase(Ephemeral, Storage)
 	NodeName              = SnakeCase(Node, Name)
 	PodName               = SnakeCase(Pod, Name)
@@ -185,6 +196,9 @@ var (
 	ExportedContainer     = SnakeCase(Exported, Container)
 	ExportedNamespace     = SnakeCase(Exported, Namespace)
 	ExportedPod           = SnakeCase(Exported, Pod)
+	SurveyInfo            = SnakeCase(Survey, InfoSt)
+	StandardInit          = CamelCase(standard, initSt)
+	NativeSidecar         = CamelCase(native, sidecar, initSt)
 )
 
 // GPU consts and vars
@@ -199,9 +213,10 @@ const (
 var (
 	Gpus              = Plural(Gpu)
 	GpuMemoryTotal    = CamelCase(Gpu, Memory, Total)
+	GpuRequest        = CamelCase(Gpu, Request)
+	GpuLimit          = CamelCase(Gpu, Limit)
 	NvidiaGpuResource = SnakeCase(Nvidia, Com, Gpu)
 	NamePrefix        = SnakeCase(Name, Prefix)
-	GpuFraction       = CamelCase(Gpu, Fraction)
 )
 
 func Join(sep string, elements ...string) string {

@@ -145,7 +145,7 @@ func nodeRequestsQuery(resource, suffix string) string {
 	var prefix string
 	switch resource {
 	case Cpu, Memory, NvidiaGpuResource:
-		prefix = QueryForResource("sum(sum(kube_pod_container_resource_requests{}"+suffix, resource)
+		prefix = QueryForResource(`sum(sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`+suffix, resource)
 	default:
 		prefix = fmt.Sprintf("sum(sum(kube_pod_container_resource_requests_%s{}%s", resource, suffix)
 	}
@@ -156,7 +156,7 @@ func nodeReservationPercentQuery(resource string) string {
 	var prefix, suffix string
 	switch resource {
 	case Cpu, Memory, NvidiaGpuResource:
-		prefix = QueryForResource("100 * sum(sum(kube_pod_container_resource_requests{}", resource)
+		prefix = QueryForResource(`100 * sum(sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`, resource)
 		suffix = QueryForResource(") by (node)%s) / sum(sum(kube_node_status_allocatable{}) by (node)%s)", resource)
 	default:
 		prefix = fmt.Sprintf("100 * sum(sum(kube_pod_container_resource_requests_%s{}", resource)

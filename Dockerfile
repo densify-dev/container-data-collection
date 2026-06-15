@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=alpine
 
-FROM golang:bookworm AS builder
+FROM golang:trixie AS builder
 # Enable Docker BuildKit automatic platform ARGs
 ARG TARGETARCH
 ARG VERSION
@@ -31,7 +31,7 @@ RUN case ${BASE_IMG} in \
     alpine* ) \
         addgroup -g 3000 densify && \
         adduser -h /home/densify -s /bin/sh -u 3000 -G densify -g "" -D densify && \
-        apk update && apk upgrade --no-cache zlib && \
+        apk update && apk upgrade --no-cache && \
         rm -f /sbin/apk ;; \
     *ubi* ) \
         microdnf install -y shadow-utils && \

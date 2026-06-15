@@ -2,6 +2,7 @@
 package container
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -117,14 +118,14 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,GpuLimitFloat,GpuRequestFloat,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy,EphemeralStorageRequest,EphemeralStorageLimit"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,ContainerType,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,GpuLimitFloat,GpuRequestFloat,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy,EphemeralStorageRequest,EphemeralStorageLimit,Runtimes"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
 	for nsName, ns := range cluster {
 		for _, obj := range ns.objects {
 			for cName, c := range obj.containers {
-				if _, err = fmt.Fprintf(attributeWrite, "%s,%s,%s,%s,%s,Containers,%s,%s,%s,", name, nsName, common.ReplaceSemiColons(obj.name), getOwnerKindValue(obj.kind), common.ReplaceColons(cName), name, nsName, obj.name); err != nil {
+				if _, err = fmt.Fprintf(attributeWrite, "%s,%s,%s,%s,%s,%v,Containers,%s,%s,%s,", name, nsName, common.ReplaceSemiColons(obj.name), getOwnerKindValue(obj.kind), common.ReplaceColons(cName), c.containerType, name, nsName, obj.name); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
@@ -205,10 +206,22 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
-				if err = common.PrintCSVNumberValue(attributeWrite, c.ephemeralStorageLimit, true); err != nil {
+				if err = common.PrintCSVNumberValue(attributeWrite, c.ephemeralStorageLimit, false); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}
+				var jsonRuntimes []byte
+				if jsonRuntimes, err = json.Marshal(c.runtimes.runtimes); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+				jsonRuntimesEscaped := strings.ReplaceAll(string(jsonRuntimes), `"`, `""`)
+				jsonRuntimesEscapedQuoted := fmt.Sprintf(`"%s"`, jsonRuntimesEscaped)
+				if err = common.PrintCSVStringValue(attributeWrite, jsonRuntimesEscapedQuoted, true); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+
 			}
 		}
 	}
