@@ -61,7 +61,6 @@ func getObservabilityPlatform() ObservabilityPlatform {
 const (
 	// balancedParens pattern matches balanced parentheses. It can handle multiple levels of nesting.
 	balancedParens = `\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)`
-	overTimeSuffix = "_over_time"
 )
 
 var (
@@ -77,7 +76,7 @@ func nonCapturingGroup(s string) string {
 func buildGmpRegex() *regexp.Regexp {
 	// overTimePattern matches an `_over_time` and uses the balanced parentheses pattern
 	// to correctly find the function's end.
-	overTimePattern := fmt.Sprintf(`[a-zA-Z0-9_]+%s\s*%s`, overTimeSuffix, balancedParens)
+	overTimePattern := fmt.Sprintf(`[a-zA-Z0-9_]+%s\s*%s`, OverTimeSuffix, balancedParens)
 	var patterns = make([]string, 0, len(metricPrefixes)+1)
 	patterns = append(patterns, nonCapturingGroup(overTimePattern))
 	for _, prefix := range metricPrefixes {
@@ -96,7 +95,7 @@ func gmpQueryAdjuster(query string) string {
 		// IMPORTANT CHECK: If we matched an `_over_time` function, we must double-check
 		// that it actually contains a kube-state-metrics metric. This prevents false positives on
 		// complex queries where the regex might over-match.
-		if strings.HasSuffix(match, RightBracket) && strings.Contains(match, overTimeSuffix) {
+		if strings.HasSuffix(match, RightBracket) && strings.Contains(match, OverTimeSuffix) {
 			var found bool
 			for _, metricPrefix := range metricPrefixes {
 				if found = strings.Contains(match, metricPrefix); found {

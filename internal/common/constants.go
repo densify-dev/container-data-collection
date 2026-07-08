@@ -132,6 +132,9 @@ const (
 	Regular     = "Regular"
 	native      = "native"
 	sidecar     = "sidecar"
+	Over        = "over"
+	Present     = "present"
+	Last        = "last"
 )
 
 // owner kind labels
@@ -199,6 +202,7 @@ var (
 	SurveyInfo            = SnakeCase(Survey, InfoSt)
 	StandardInit          = CamelCase(standard, initSt)
 	NativeSidecar         = CamelCase(native, sidecar, initSt)
+	OverTimeSuffix        = AggOverTime("a")[1:] // "a" required to get leading '_'
 )
 
 // GPU consts and vars
@@ -249,6 +253,10 @@ func DromedaryCase(elements ...string) string {
 
 func SnakeCase(elements ...string) string {
 	return snakeCase(JoinSpace(elements...))
+}
+
+func AggOverTime(agg string) string {
+	return SnakeCase(agg, Over, Time)
 }
 
 func Plural(s string) string {

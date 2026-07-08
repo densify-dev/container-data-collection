@@ -374,7 +374,7 @@ const (
 	prometheusMetricName = "__name__"
 	metricName           = "metric_name"
 	allMetricsQueryFmt   = `{%s=~"%s_%s"}`
-	allMetricsFmt        = `sum(present_over_time(%s[%v:])) by (%s) > 0`
+	allMetricsFmt        = `group by (%s) (%s)`
 )
 
 func LogAllMetrics() (err error) {
@@ -383,8 +383,9 @@ func LogAllMetrics() (err error) {
 	for _, exp := range exporters {
 		if exp.logAllMetrics || Params.Debug {
 			query = fmt.Sprintf(allMetricsQueryFmt, prometheusMetricName, exp.metricsPrefix, Always.String())
+			query = aggOverTimeQuery(query, Last, Interval)
 			query = LabelReplace(query, metricName, prometheusMetricName, HasValue)
-			query = fmt.Sprintf(allMetricsFmt, query, Interval, metricName)
+			query = fmt.Sprintf(allMetricsFmt, metricName, query)
 			_, err = CollectAndProcessMetric(query, et, exp.logAllClusterMetrics)
 		}
 	}
@@ -494,61 +495,258 @@ func addExporter(exps map[string]*exporter, name, repMetric string, repLabels []
 var clusterExporters = make(map[string]map[string]*clusterExporter)
 var clusterExportersByJob = make(map[string]map[string][]*clusterExporter)
 
+type intervalFunction string
+
 const (
-	rate     = "rate"
-	increase = "increase"
-	changes  = "changes"
+	rate          intervalFunction = "rate"
+	irate         intervalFunction = "irate"
+	increase      intervalFunction = "increase"
+	changes       intervalFunction = "changes"
+	delta         intervalFunction = "delta"
+	idelta        intervalFunction = "idelta"
+	deriv         intervalFunction = "deriv"
+	predictLinear intervalFunction = "predict_linear"
+	holtWinters   intervalFunction = "holt_winters"
+	resets        intervalFunction = "resets"
 )
 
-var intervalFunctions = map[string]string{rate: "i", increase: Empty, changes: Empty}
+var intervalFunctions = []intervalFunction{rate, irate, increase, changes, intervalFunction(OverTimeSuffix), delta, idelta, deriv, predictLinear, holtWinters, resets}
+
+func scrapeIntervalMultiplication(scrapeInterval time.Duration, dur string) (d time.Duration, err error) {
+	if !strings.HasPrefix(dur, Asterisk) {
+		err = fmt.Errorf("interval %q does not start with %q", dur, Asterisk)
+		return
+	}
+	var n int64
+	if n, err = strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(dur, Asterisk)), 10, 64); err == nil {
+		d = scrapeInterval * time.Duration(n)
+	}
+	return
+}
 
 func adjustIntervalToScrapeInterval(cluster string, query string) (q string, si time.Duration) {
 	q = query
 	if cluster == Empty {
 		return
 	}
-	for f, prefixIgnore := range intervalFunctions {
-		flb := f + leftBracket
-		var prev string
-		var reps []string
-		for i, s := range strings.Split(q, flb) {
-			var rep string
-			if i > 0 && (prefixIgnore == Empty || !strings.HasSuffix(prev, prefixIgnore)) {
-				if j := strings.Index(s, leftSquareBracket); j > -1 {
-					if k := strings.Index(s[j:], rightSquareBracket); k > -1 {
-						metricName := s[:j]
-						scrapeInterval := getScrapeInterval(cluster, metricName)
-						orgD := s[j+1 : j+k]
-						var d time.Duration
-						var err error
-						if d, err = time.ParseDuration(orgD); err == nil {
-							d += scrapeInterval
-						} else {
-							if strings.HasPrefix(orgD, Asterisk) {
-								var n int64
-								if n, err = strconv.ParseInt(strings.TrimSpace(strings.TrimPrefix(orgD, Asterisk)), 10, 64); err == nil {
-									d = scrapeInterval * time.Duration(n)
-								}
-							}
-						}
-						if err == nil {
-							rep = fmt.Sprintf("%s[%v]%s", metricName, d, s[j+k+1:])
-							if si == 0 || scrapeInterval < si {
-								si = scrapeInterval
-							}
-						}
-					}
-				}
-			}
-			if rep == Empty {
-				rep = s
-			}
-			reps = append(reps, rep)
-			prev = s
+	for _, ifn := range intervalFunctions {
+		var scrapeInterval time.Duration
+		q, scrapeInterval = adjustIntervalsForFunction(cluster, q, ifn)
+		if scrapeInterval > 0 && (si == 0 || scrapeInterval < si) {
+			si = scrapeInterval
 		}
-		q = strings.Join(reps, flb)
 	}
 	return
+}
+
+func adjustIntervalsForFunction(cluster string, query string, ifn intervalFunction) (q string, si time.Duration) {
+	var b strings.Builder
+	for i := 0; i < len(query); {
+		bodyStart, bodyEnd, ok := intervalFunctionCall(query, i, ifn)
+		if !ok {
+			b.WriteByte(query[i])
+			i++
+			continue
+		}
+
+		b.WriteString(query[i:bodyStart])
+		body := query[bodyStart:bodyEnd]
+		if j, k := intervalInFunctionBody(body); j > -1 {
+			mName := metricNameFromExpression(body[:j])
+			if mName == Empty {
+				mName = metricNameBeforeRange(body, j)
+			}
+			scrapeInterval := getScrapeInterval(cluster, mName)
+			if interval, changed := adjustedInterval(ifn, scrapeInterval, body[j+1:k]); changed {
+				b.WriteString(body[:j+1])
+				b.WriteString(interval)
+				b.WriteString(body[k:])
+				if scrapeInterval > 0 && (si == 0 || scrapeInterval < si) {
+					si = scrapeInterval
+				}
+			} else {
+				b.WriteString(body)
+			}
+		} else {
+			b.WriteString(body)
+		}
+		b.WriteByte(query[bodyEnd])
+		i = bodyEnd + 1
+	}
+	return b.String(), si
+}
+
+func intervalFunctionCall(query string, i int, ifn intervalFunction) (bodyStart, bodyEnd int, ok bool) {
+	if ifn == intervalFunction(OverTimeSuffix) {
+		if query[i] != leftBracket[0] {
+			return
+		}
+		nameStart := i
+		for nameStart > 0 && isPromFunctionNameChar(query[nameStart-1]) {
+			nameStart--
+		}
+		if !strings.HasSuffix(query[nameStart:i], OverTimeSuffix) {
+			return
+		}
+	} else {
+		fn := string(ifn) + leftBracket
+		if !strings.HasPrefix(query[i:], fn) || (i > 0 && isPromFunctionNameChar(query[i-1])) {
+			return
+		}
+		i += len(ifn)
+	}
+
+	bodyStart = i + 1
+	bodyEnd = matchingRightParen(query, i)
+	ok = bodyEnd > -1
+	return
+}
+
+func intervalInFunctionBody(body string) (start, end int) {
+	parenDepth := 0
+	inString := false
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if c == '\\' && inString {
+			i++
+			continue
+		}
+		if c == DoubleQuote[0] {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		switch c {
+		case leftBracket[0]:
+			parenDepth++
+		case RightBracket[0]:
+			parenDepth--
+		case leftSquareBracket[0]:
+			if parenDepth == 0 {
+				if k := strings.Index(body[i:], rightSquareBracket); k > -1 {
+					return i, i + k
+				}
+			}
+		}
+	}
+	return -1, -1
+}
+
+func adjustedInterval(ifn intervalFunction, scrapeInterval time.Duration, interval string) (string, bool) {
+	switch ifn {
+	case intervalFunction(OverTimeSuffix):
+		parts := strings.SplitN(interval, ":", 2)
+		if len(parts) == 2 {
+			if d, err := scrapeIntervalMultiplication(scrapeInterval, strings.TrimSpace(parts[1])); err == nil {
+				return parts[0] + ":" + d.String(), true
+			}
+		}
+	case irate, idelta:
+		if d, err := scrapeIntervalMultiplication(scrapeInterval, interval); err == nil {
+			return d.String(), true
+		}
+	default:
+		if d, err := time.ParseDuration(interval); err == nil {
+			return (d + scrapeInterval).String(), true
+		}
+		if d, err := scrapeIntervalMultiplication(scrapeInterval, interval); err == nil {
+			return d.String(), true
+		}
+	}
+	return interval, false
+}
+
+func matchingRightParen(query string, left int) int {
+	depth := 0
+	inString := false
+	for i := left; i < len(query); i++ {
+		c := query[i]
+		if c == '\\' && inString {
+			i++
+			continue
+		}
+		if c == DoubleQuote[0] {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		switch c {
+		case leftBracket[0]:
+			depth++
+		case RightBracket[0]:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func metricNameFromExpression(expr string) string {
+	if j := firstRangeStart(expr); j > -1 {
+		return metricNameBeforeRange(expr, j)
+	}
+	return Empty
+}
+
+func firstRangeStart(expr string) int {
+	inString := false
+	for i := 0; i < len(expr); i++ {
+		c := expr[i]
+		if c == '\\' && inString {
+			i++
+			continue
+		}
+		if c == DoubleQuote[0] {
+			inString = !inString
+			continue
+		}
+		if !inString && c == leftSquareBracket[0] {
+			return i
+		}
+	}
+	return -1
+}
+
+func metricNameBeforeRange(expr string, rangeStart int) string {
+	s := strings.TrimSpace(expr[:rangeStart])
+	if strings.HasSuffix(s, rightBrace) {
+		inString := false
+		selectorStart := -1
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c == '\\' && inString {
+				i++
+				continue
+			}
+			if c == DoubleQuote[0] {
+				inString = !inString
+				continue
+			}
+			if !inString && c == leftBrace[0] {
+				selectorStart = i
+			}
+		}
+		if selectorStart > -1 {
+			s = s[:selectorStart]
+		}
+	}
+	if i := strings.LastIndexAny(s, " \t(,+-*/%^:"); i > -1 {
+		s = s[i+1:]
+	}
+	if i := strings.Index(s, leftBrace); i > -1 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
+
+func isPromFunctionNameChar(c byte) bool {
+	return c == '_' || c == ':' || c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
 }
 
 func getScrapeInterval(cluster string, metricName string) (si time.Duration) {
@@ -594,9 +792,10 @@ var presentMetrics = make(map[string]map[string]bool)
 
 func ResolveMetrics(m ResolveMetricMap) (err error) {
 	et := TimeRangeEndTimeOnly()
-	for metricName, f := range m {
-		mr := &metricResolver{metricName: metricName, f: f}
-		query := fmt.Sprintf(`max(present_over_time(%s{}[%v]))`, metricName, Interval)
+	for mName, f := range m {
+		mr := &metricResolver{metricName: mName, f: f}
+		query := aggOverTimeQuery(mName+Braces, Present, Interval)
+		query = fmt.Sprintf(`max(%s)`, query)
 		if _, err = CollectAndProcessMetric(query, et, mr.resolve); err != nil {
 			break
 		}

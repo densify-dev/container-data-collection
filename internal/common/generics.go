@@ -80,7 +80,7 @@ m2Loop:
 		if _, found := m[k]; found {
 			switch mds {
 			case Fail:
-				err = fmt.Errorf("duplicate entries for key %s", k)
+				err = fmt.Errorf("duplicate entries for key %v", k)
 				m = nil
 				break m2Loop
 			case Override:
