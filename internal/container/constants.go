@@ -10,7 +10,6 @@ const (
 	restart             = "restart"
 	noOwnersFoundFormat = common.ClusterFormat + " - no %s owners found"
 	create              = "create"
-	timeSt              = "time"
 	surge               = "surge"
 	unavailable         = "unavailable"
 	metadata            = "metadata"
@@ -49,16 +48,16 @@ var (
 	ownerName = common.SnakeCase(common.Owner, common.Name)
 	ownerKind = common.SnakeCase(common.Owner, common.Kind)
 	// various
-	createTime            = common.DromedaryCase(create, timeSt)
+	createTime            = common.DromedaryCase(create, common.Time)
 	maxSurge              = common.DromedaryCase(common.Max, surge)
 	maxUnavailable        = common.DromedaryCase(common.Max, unavailable)
 	metadataGeneration    = common.DromedaryCase(metadata, generation)
 	specCompletions       = common.DromedaryCase(spec, common.Plural(completion))
 	specParallelism       = common.DromedaryCase(spec, parallelism)
-	statusCompletionTime  = common.DromedaryCase(status, completion, timeSt)
-	statusStartTime       = common.DromedaryCase(status, start, timeSt)
-	nextScheduleTime      = common.DromedaryCase(next, schedule, timeSt)
-	lastScheduleTime      = common.DromedaryCase(last, schedule, timeSt)
+	statusCompletionTime  = common.DromedaryCase(status, completion, common.Time)
+	statusStartTime       = common.DromedaryCase(status, start, common.Time)
+	nextScheduleTime      = common.DromedaryCase(next, schedule, common.Time)
+	lastScheduleTime      = common.DromedaryCase(last, schedule, common.Time)
 	statusActive          = common.DromedaryCase(status, active)
 	scalingLimited        = common.CamelCase(scaling, limited)
 	metricNameLabel       = common.SnakeCase(common.Metric, common.Name)

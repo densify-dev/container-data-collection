@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type QueryAdjuster func(string) string
@@ -169,7 +170,7 @@ func FormatRepeatedAuto(format string, v any, other ...any) string {
 	n2 := len(other)
 	n := n1 + n2
 	if n == 0 {
-		return fmt.Sprintf(format)
+		return format
 	}
 	args := make([]any, n1, n)
 	for i := range n1 {
@@ -190,7 +191,11 @@ func EphemeralExporterLabelReplace(query string) string {
 }
 
 func AggOverTimeQuery(q string, agg string) string {
-	return fmt.Sprintf("%s_over_time(%s[%v:])", agg, q, Step)
+	return aggOverTimeQuery(q, agg, Step)
+}
+
+func aggOverTimeQuery(q string, agg string, interval time.Duration) string {
+	return fmt.Sprintf("%s(%s[%v])", AggOverTime(agg), q, interval)
 }
 
 func DcgmAggOverTimeQuery(q string, agg string) string {

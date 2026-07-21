@@ -2,13 +2,14 @@ package kubernetes
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/prometheus/common/model"
-	"golang.org/x/exp/slices"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
+	"github.com/prometheus/common/model"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -163,11 +164,12 @@ func hasMinimum(bi *BuildInfo, tvs *TypedVersions) bool {
 }
 
 const (
-	gitVersion = "git_version"
-	major      = "major"
-	minor      = "minor"
-	kubelet    = "kubelet"
-	apiServers = "apiservers"
+	gitVersion  = "git_version"
+	major       = "major"
+	minor       = "minor"
+	kubelet     = "kubelet"
+	apiServers  = "apiservers"
+	apiServers2 = "api-servers"
 )
 
 var nodes = common.Plural(common.Node)
@@ -183,7 +185,7 @@ func getVersion(cluster string, result model.Matrix) {
 	for _, ss := range result {
 		if bil, f := common.GetLabelsValues(ss, buildInfoLabels); f {
 			var tvs *TypedVersions
-			if strings.Contains(bil[common.Job], apiServers) {
+			if strings.Contains(bil[common.Job], apiServers) || strings.Contains(bil[common.Job], apiServers2) {
 				tvs = cvs.ApiServers
 			} else if strings.Contains(bil[common.Job], nodes) || strings.Contains(bil[common.Job], kubelet) {
 				tvs = cvs.Nodes
