@@ -401,6 +401,8 @@ const (
 	ephemeralStorage = "k8s-ephemeral-storage-metrics"
 	KubexGpu         = "kubex-gpu-process-exporter"
 	Beyla            = "beyla"
+	CustomMetrics    = "custom-metrics" // may be metrics obtained by recording rules, so not a true exporter
+	JmxExporter      = "jmx-exporter"
 )
 
 type exporter struct {
@@ -485,6 +487,8 @@ func makeExporters() map[string]*exporter {
 	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true)
 	addExporter(exps, KubexGpu, "kubex_gpu_container_requests", nil, true)
 	addExporter(exps, Beyla, SurveyInfo, nil, true)
+	addExporter(exps, CustomMetrics, "custom_container_memory_usage_1", []string{Container}, true)
+	addExporter(exps, JmxExporter, "jvm_runtime_info", []string{Container}, false)
 	return exps
 }
 

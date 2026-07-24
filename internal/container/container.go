@@ -2,6 +2,8 @@ package container
 
 import (
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -855,7 +857,7 @@ func getCpuWorkloads(wq *workloadQuery) {
 
 func cpuQueryMap() map[string][]*baseWorkloadQuery {
 	mName := common.CamelCase(common.Cpu, common.MCoresSt)
-	return map[string][]*baseWorkloadQuery{
+	queryMap := map[string][]*baseWorkloadQuery{
 		common.Max: {
 			{
 				metricName: mName,
@@ -869,6 +871,8 @@ func cpuQueryMap() map[string][]*baseWorkloadQuery {
 			},
 		},
 	}
+	addCustomQueries(queryMap, common.Cpu)
+	return queryMap
 }
 
 func getMemoryWorkloads(wq *workloadQuery) {
@@ -899,7 +903,32 @@ func memQueryMap() map[string][]*baseWorkloadQuery {
 			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg])
 		}
 	}
+	addCustomQueries(queryMap, common.Memory)
 	return queryMap
+}
+
+var customPrefixes = []string{custom, common.Container}
+
+var resourceMetricNames = map[string]string{
+	common.Cpu:    common.Utilization,
+	common.Memory: common.Usage,
+}
+
+const (
+	numCustomMetrics = 5
+)
+
+func addCustomQueries(queryMap map[string][]*baseWorkloadQuery, resource string) {
+	elements := []string{resource, resourceMetricNames[resource], common.Empty}
+	numIndex := len(elements) - 1
+	for i := range numCustomMetrics {
+		elements[numIndex] = strconv.Itoa(i + 1)
+		mName := common.CamelCase(slices.Concat(customPrefixes[:1], elements)...)
+		metric := fmt.Sprintf("%s%s", common.SnakeCase(slices.Concat(customPrefixes, elements)...), common.Braces)
+		for _, agg := range aggregators {
+			addToQueryMap(queryMap, mName, agg, metric, common.Empty)
+		}
+	}
 }
 
 func getAvgMaxSeparateQueries(wq *workloadQuery, queryMap map[string][]*baseWorkloadQuery) {
