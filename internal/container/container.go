@@ -917,6 +917,8 @@ type gpuWorkloadQuery struct {
 	metricName       string
 	baseQuery        map[string]string
 	appendToPrevious bool
+	queryFunc        map[string]func(string) string
+	useSubquery      map[string]bool
 }
 
 func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
@@ -924,8 +926,14 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 		{
 			metricName: common.CamelCase(common.Gpu, common.Utilization),
 			baseQuery: map[string]string{
-				common.Dcgm:     common.SafeDcgmGpuUtilizationQuery,
+				common.Dcgm:     "DCGM_FI_DEV_GPU_UTIL{}",
 				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_sm_utilization_percent_seconds_total", common.Avg, sampleRate),
+			},
+			queryFunc: map[string]func(string) string{
+				common.Dcgm: common.SafeUtilizationQuery,
+			},
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
 			},
 		},
 		{
@@ -935,19 +943,32 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 				common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_container_requests", nil, common.Namespace, common.Pod, common.Container),
 			},
 			appendToPrevious: true,
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
+			},
 		},
 		{
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
 			baseQuery: map[string]string{
-				common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+				common.Dcgm:     "(100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}))",
 				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_memory_footprint_percent", common.Avg, 0),
+			},
+			useSubquery: map[string]bool{
+				common.Dcgm:     true,
+				common.KubexGpu: true,
 			},
 		},
 		{
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
 			baseQuery: map[string]string{
 				common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
-				common.KubexGpu: fmt.Sprintf("(kubex_gpu_container_memory_bytes{} / %d)", common.Mib),
+				common.KubexGpu: "kubex_gpu_container_memory_bytes{}",
+			},
+			queryFunc: map[string]func(string) string{
+				common.KubexGpu: toMib,
+			},
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
 			},
 		},
 		{
@@ -974,14 +995,25 @@ func makeKubexGpuQuery(metric string, agg string, sampleRate uint64, extraLabels
 
 var aggregators = []string{common.Avg, common.Max}
 
-var gpuAggOverTime = map[string]func(string, string) string{
-	common.Dcgm:     common.DcgmAggOverTimeQuery,
-	common.KubexGpu: common.AggOverTimeQuery,
+var dqg = &common.GpuQueryGenerator{
+	DcgmLabelReplace: true,
+}
+
+var kqg = &common.GpuQueryGenerator{}
+
+var gqgs = map[string]*common.GpuQueryGenerator{
+	common.Dcgm:     dqg,
+	common.KubexGpu: kqg,
+}
+
+func toMib(q string) string {
+	return fmt.Sprintf("(%s / %d)", q, common.Mib)
 }
 
 func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) {
 	ge := node.DetermineGpuExporter(range5Min)
-	if ge == common.Empty {
+	gqg := gqgs[ge]
+	if gqg == nil {
 		return
 	}
 	gpuWorkloadQueries := makeGpuWorkloadQueries(sampleRate)
@@ -996,7 +1028,9 @@ func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) 
 			if gwq.appendToPrevious {
 				wq.baseQuery += baseQuery
 			} else {
-				wq.baseQuery = gpuAggOverTime[ge](baseQuery, agg)
+				gqg.F = gwq.queryFunc[ge]
+				gqg.UseSubquery = gwq.useSubquery[ge]
+				wq.baseQuery = gqg.GpuAggOverTimeQuery(baseQuery, agg)
 			}
 			wq.aggregators = map[string]string{agg: common.Empty}
 			getWorkload(wq)
