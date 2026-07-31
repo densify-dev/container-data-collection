@@ -153,7 +153,7 @@ func Metrics() {
 	nodeWorkloadWriters.AddMetricWorkloadWriters(common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageLimits, common.EphemeralStorageRequests)
 
 	mh.name = common.Limits
-	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{} or (kube_pod_init_container_resource_limits{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`, `) by (node, resource)`)
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_limits{} or (kube_pod_init_container_resource_limits{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))`, `) by (node, resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuLimit
@@ -165,7 +165,7 @@ func Metrics() {
 	}
 
 	mh.name = common.Requests
-	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"})`, `) by (node,resource)`)
+	query = common.FilterTerminatedContainers(`sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))`, `) by (node,resource)`)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getNodeMetric)
 	if common.Found(indicators, mh.name, false) {
 		mh.name = common.CpuRequest
@@ -185,7 +185,7 @@ func Metrics() {
 	wmhs := []*common.WorkloadMetricHolder{common.CpuReservationPercent, common.MemoryReservationPercent, common.EphemeralStorageReservationPercent}
 	var rpCoreMetrics = []*reservationPercentQuery{
 		{metrics: []string{"kube_pod_container_resource_requests", "kube_pod_init_container_resource_requests"},
-			queryFmt: `%s or (%s * on (namespace, pod, container) group_left kube_pod_init_container_info{restart_policy="Always"}) `,
+			queryFmt: `%s or (%s * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"})) `,
 			clause:   common.FilterTerminatedContainersClause},
 		{metrics: []string{"kube_node_status_allocatable"},
 			queryFmt: "%s",
