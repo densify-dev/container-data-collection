@@ -1,6 +1,6 @@
 # Changelog
 
-This file documents changes to the Densify Kubex Collector image.
+This file documents changes to the Kubex Collector image.
 
 **Note:** This repository contains only the source code for the Kubex Collector image. For deployment documentation, configuration, and setup instructions, please refer to the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack).
 

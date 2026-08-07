@@ -1,8 +1,12 @@
-# Densify Kubex Collector
+# Kubex Collector
 
-<img src="https://www.densify.com/wp-content/uploads/densify.png" width="300">
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://kubex.ai/wp-content/uploads/kubex-logo-reverse-landscape.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://kubex.ai/wp-content/uploads/kubex-logo-landscape.svg">
+    <img src="https://kubex.ai/wp-content/uploads/kubex-logo-landscape.svg" width="300">
+</picture>
 
-This repository contains the source code for the Densify Kubex Collector image. The Kubex Collector gathers data from Kubernetes using the Prometheus API and sends that data to Densify for analysis and optimization recommendations.
+This repository contains the source code for the Kubex Collector image. The Kubex Collector gathers data from Kubernetes using the Prometheus API and sends that data to Kubex for analysis and optimization recommendations.
 
 ## Deployment
 
@@ -24,7 +28,7 @@ docker pull densify/container-optimization-data-forwarder:4
 
 ## Development
 
-This is a Go-based application that queries Prometheus metrics and sends them to Densify's platform.
+This is a Go-based application that queries Prometheus metrics and sends them to the Kubex platform.
 
 ## License
 
