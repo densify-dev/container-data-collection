@@ -1,46 +1,30 @@
-# Densify Container Optimization Data Forwarder
+# Densify Container Data Forwarder
 
 <img src="https://www.densify.com/wp-content/uploads/densify.png" width="300">
 
-The Densify Container Optimization Data Forwarder is the container that collects data from Kubernetes using the Prometheus API and forwards that data to Densify. Densify then analyzes your Kubernetes clusters and provides sizing recommendations. 
+This repository contains the source code for the Densify Container Data Forwarder image. The forwarder collects data from Kubernetes using the Prometheus API and forwards that data to Densify for analysis and optimization recommendations.
 
-- [Requirements](./requirements.md)
-- [Single Kubernetes Cluster Setup](#single-kubernetes-cluster)
-- [Multiple Kubernetes Clusters Setup](#multiple-kubernetes-clusters)
-- [Documentation](./docs)
-- [Docker Images](#docker-images)
-- [License](#license)
+## Deployment
 
-## Cluster Setup
+This image is deployed as part of the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack), which bundles all required dependencies including:
+- Prometheus
+- cAdvisor  
+- kube-state-metrics
+- node-exporter
+- DCGM exporter (for GPU monitoring)
 
-Densify supports two use-cases for version 4 or higher of the Forwarder.
+For installation instructions, configuration details, and requirements, please refer to the [kubex-automation-stack documentation](https://github.com/densify-dev/kubex-automation-stack).
 
-### [Single Kubernetes Cluster](./single-cluster)
+## Docker Images
 
-In this configuration, data is collected from the Kubernetes cluster where your workloads, the Densify Forwarder and Prometheus are all running.
+The Docker image is available on [Docker Hub](https://hub.docker.com/r/densify/container-optimization-data-forwarder/tags). Pull it using:
+```bash
+docker pull densify/container-optimization-data-forwarder:4
+```
 
-#### [Single Cluster Config](./single-cluster/config)
+## Development
 
-#### Single Cluster Examples
-
-- [Kubernetes with Prometheus](./single-cluster/examples/standard)
-- [Kubernetes with Authenticated Prometheus, typical case for OpenShift](./single-cluster/examples/bearer-openshift)
-
-### [Multiple Kubernetes Clusters](./multi-cluster)
-
-In this configuration, data is collected from multiple Kubernetes clusters monitored by an observability platform. The Densify Forwarder can run anywhere (provided it can access that observability platform).
-
-#### [Multi-Cluster Config](./multi-cluster/config)
-
-#### Multi-Cluster Examples
-
-- [Kubernetes with observability platform using basic authentication](./multi-cluster/examples/basic)
-- [Kubernetes with Amazon Managed Prometheus (AMP)](./multi-cluster/examples/amp)
-- [Azure Monitor managed service for Prometheus (AzMP)](./multi-cluster/examples/azmp/)
-
-## Docker images
-
-The Docker image is available on [Docker hub](https://hub.docker.com/r/densify/container-optimization-data-forwarder/tags). Pull it using `docker pull densify/container-optimization-data-forwarder:4`.
+This is a Go-based application that queries Prometheus metrics and forwards them to Densify's platform.
 
 ## License
 

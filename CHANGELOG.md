@@ -1,8 +1,10 @@
 # Changelog
 
-Version 4 introduces significant updates of Densify Container Data Collection. It resides in a new [Github repository](https://github.com/densify-dev/container-data-collection), which replaces the [versions 1-3 repository](https://github.com/densify-dev/Container-Optimization-Data-Forwarder), to be deprecated on June 30th, 2024.
+This file documents changes to the Densify Container Data Forwarder image.
 
-This file documents the changes in both repositories. Those in this repository starts with the `4.0.0-beta` release.
+**Note:** This repository contains only the source code for the data forwarder image. For deployment documentation, configuration, and setup instructions, please refer to the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack).
+
+Version 4 introduced significant updates, moving from the [versions 1-3 repository](https://github.com/densify-dev/Container-Optimization-Data-Forwarder) (deprecated June 30, 2024) to this repository.
 
 ## 4.0.0
 
