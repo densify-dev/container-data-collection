@@ -1,8 +1,8 @@
 # Changelog
 
-This file documents changes to the Densify Container Data Forwarder image.
+This file documents changes to the Densify Kubex Collector image.
 
-**Note:** This repository contains only the source code for the data forwarder image. For deployment documentation, configuration, and setup instructions, please refer to the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack).
+**Note:** This repository contains only the source code for the Kubex Collector image. For deployment documentation, configuration, and setup instructions, please refer to the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack).
 
 Version 4 introduced significant updates, moving from the [versions 1-3 repository](https://github.com/densify-dev/Container-Optimization-Data-Forwarder) (deprecated June 30, 2024) to this repository.
 

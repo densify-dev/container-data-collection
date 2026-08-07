@@ -1,8 +1,8 @@
-# Densify Container Data Forwarder
+# Densify Kubex Collector
 
 <img src="https://www.densify.com/wp-content/uploads/densify.png" width="300">
 
-This repository contains the source code for the Densify Container Data Forwarder image. The forwarder collects data from Kubernetes using the Prometheus API and forwards that data to Densify for analysis and optimization recommendations.
+This repository contains the source code for the Densify Kubex Collector image. The Kubex Collector gathers data from Kubernetes using the Prometheus API and sends that data to Densify for analysis and optimization recommendations.
 
 ## Deployment
 
@@ -24,7 +24,7 @@ docker pull densify/container-optimization-data-forwarder:4
 
 ## Development
 
-This is a Go-based application that queries Prometheus metrics and forwards them to Densify's platform.
+This is a Go-based application that queries Prometheus metrics and sends them to Densify's platform.
 
 ## License
 
