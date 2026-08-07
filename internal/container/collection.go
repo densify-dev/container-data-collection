@@ -690,9 +690,13 @@ func newAggregatorWorkloadMetricHolder(aggregator string, aggregatorAsSuffix, wo
 	return wmh
 }
 
+type baseWorkloadQuery struct {
+	metricName string
+	baseQuery  string
+	aggSuffix  string
+}
 type workloadQuery struct {
-	metricName         string
-	baseQuery          string
+	baseWorkloadQuery
 	wqwIdx             int
 	hasSuffix          bool
 	aggregatorAsSuffix bool

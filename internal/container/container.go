@@ -743,66 +743,26 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.JoinSpace(common.Container, common.Workload))
 	groupClauses := buildGroupClauses(common.Metric)
 	wq := &workloadQuery{
-		metricName:   common.CamelCase(common.Cpu, common.MCoresSt),
-		baseQuery:    fmt.Sprintf(`round(max(irate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,%s,namespace,%s)*1000,1)`, common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx]),
 		wqwIdx:       podIdx,
 		hasSuffix:    true,
 		aggregators:  map[string]string{common.Max: common.Empty, common.Avg: common.Empty},
 		groupClauses: groupClauses,
 	}
-	getWorkload(wq)
+	getCpuWorkloads(wq)
+	getMemoryWorkloads(wq)
 
-	wq.metricName = common.Mem
-	wq.aggregators[common.Avg] = " / (1024 * 1024)"
-	wq.baseQuery = fmt.Sprintf(`max(container_memory_usage_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
-	getWorkload(wq)
-
-	wq.metricName = rss
-	wq.baseQuery = fmt.Sprintf(`max(container_memory_rss{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
-	getWorkload(wq)
-
-	wq.metricName = common.WorkingSet
-	wq.baseQuery = fmt.Sprintf(`max(container_memory_working_set_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
-	getWorkload(wq)
+	wq.aggregators[common.Max] = common.Empty
+	wq.aggregators[common.Avg] = common.Empty
 
 	if node.HasEphemeralStorageExporter(range5Min) {
 		wq.metricName = common.CamelCase(common.Ephemeral, common.Storage, common.Usage, common.Bytes)
-		wq.aggregators[common.Avg] = common.Empty
 		wq.aggregatorAsSuffix = true
 		rootfsUsage := common.LabelReplace(`ephemeral_storage_container_rootfs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
 		logUsage := common.LabelReplace(`ephemeral_storage_container_logs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
 		volumeUsage := common.LabelReplace(`ephemeral_storage_container_volume_usage{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
 		volumeCount := `count by (pod_name, pod_namespace, volume_name) (ephemeral_storage_container_volume_usage{})`
 		terminatedFilter := ` * on(pod, namespace) group_left() (max by(pod, namespace) (kube_pod_status_phase{phase="Running"}) == 1)`
-		queryTemplate := fmt.Sprintf(`
-		(
-		  %[1]s	+ %[2]s
-		)
-		+ on(pod_name, pod_namespace, container) group_left()
-		(
-			sum by (pod_name, pod_namespace, container) (
-			  %[3]s
-			  * on(pod_name, pod_namespace, volume_name) group_left()
-			  (%[4]s == 1)
-			)
-			or
-			sum by (pod_name, pod_namespace, container) (
-			   %[2]s * 0
-			)
-		)
-		+ on(pod_name, pod_namespace, container) group_left()
-		(
-			sum by (pod_name, pod_namespace, container) (
-			  bottomk (1, %[3]s)
-			  by (pod_name, pod_namespace, volume_name)
-			  and on(pod_name, pod_namespace, volume_name)
-			  (%[4]s > 1)	
-			)
-			or
-			sum by (pod_name, pod_namespace, container) (
-			   %[2]s  * 0
-			)
-		)`, rootfsUsage, logUsage, volumeUsage, volumeCount)
+		queryTemplate := fmt.Sprintf(`(%[1]s + %[2]s) + on (pod_name, pod_namespace, container) group_left() (sum by (pod_name, pod_namespace, container) (%[3]s * on (pod_name, pod_namespace, volume_name) group_left() (%[4]s == 1)) or sum by (pod_name, pod_namespace, container) (%[2]s * 0)) + on (pod_name, pod_namespace, container) group_left() (sum by (pod_name, pod_namespace, container) (bottomk (1, %[3]s) by (pod_name, pod_namespace, volume_name)  and on (pod_name, pod_namespace, volume_name) (%[4]s > 1)) or sum by (pod_name, pod_namespace, container) (%[2]s * 0))`, rootfsUsage, logUsage, volumeUsage, volumeCount)
 		query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
 		wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx]) + terminatedFilter
 		getWorkload(wq)
@@ -817,8 +777,8 @@ func Metrics() {
 	getWorkload(wq)
 
 	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Percent)
-	wq.baseQuery = fmt.Sprintf(`sum((round(increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm])) == 0) or (100 * round(increase(container_cpu_cfs_throttled_periods_total{name!~"k8s_POD_.*"}[%dm])) / round(increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm])))) by (instance,%s,namespace,%s)`,
-		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`(sum by (instance, %s, namespace, %s) (increase(container_cpu_cfs_throttled_periods_total{name!~"k8s_POD_.*"}[%dm])) / sum by (instance, %s, namespace, %s) (increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm]) > 0)) * 100`,
+		labelPlaceholders[podIdx], labelPlaceholders[containerIdx], common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx], common.Params.Collection.SampleRate)
 	getWorkload(wq)
 
 	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Seconds)
@@ -889,10 +849,76 @@ func Metrics() {
 	}
 }
 
+func getCpuWorkloads(wq *workloadQuery) {
+	getAvgMaxSeparateQueries(wq, cpuQueryMap())
+}
+
+func cpuQueryMap() map[string][]*baseWorkloadQuery {
+	mName := common.CamelCase(common.Cpu, common.MCoresSt)
+	return map[string][]*baseWorkloadQuery{
+		common.Max: {
+			{
+				metricName: mName,
+				baseQuery:  fmt.Sprintf(`%s(round(1000 * irate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[*3]), 1)[%dm:*1])`, common.AggOverTime(common.Max), common.Params.Collection.SampleRate),
+			},
+		},
+		common.Avg: {
+			{
+				metricName: mName,
+				baseQuery:  fmt.Sprintf(`1000 * rate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[%dm])`, common.Params.Collection.SampleRate),
+			},
+		},
+	}
+}
+
+func getMemoryWorkloads(wq *workloadQuery) {
+	getAvgMaxSeparateQueries(wq, memQueryMap())
+}
+
+func addToQueryMap(queryMap map[string][]*baseWorkloadQuery, mName, agg, metric, suffix string) {
+	queryMap[agg] = append(queryMap[agg], &baseWorkloadQuery{
+		metricName: mName,
+		baseQuery:  common.AggOverTimeQuery(metric, agg),
+		aggSuffix:  suffix,
+	})
+}
+
+func memQueryMap() map[string][]*baseWorkloadQuery {
+	queryMap := make(map[string][]*baseWorkloadQuery)
+	suffixes := map[string]string{
+		common.Avg: " / (1024 * 1024)",
+		common.Max: common.Empty,
+	}
+	metrics := map[string]string{
+		common.Mem:        `container_memory_usage_bytes{name!~"k8s_POD_.*"}`,
+		rss:               `container_memory_rss{name!~"k8s_POD_.*"}`,
+		common.WorkingSet: `container_memory_working_set_bytes{name!~"k8s_POD_.*"}`,
+	}
+	for _, agg := range aggregators {
+		for mName, metric := range metrics {
+			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg])
+		}
+	}
+	return queryMap
+}
+
+func getAvgMaxSeparateQueries(wq *workloadQuery, queryMap map[string][]*baseWorkloadQuery) {
+	for agg, baseQueries := range queryMap {
+		for _, baseQuery := range baseQueries {
+			wq.metricName = baseQuery.metricName
+			wq.baseQuery = baseQuery.baseQuery
+			wq.aggregators = map[string]string{agg: baseQuery.aggSuffix}
+			getWorkload(wq)
+		}
+	}
+}
+
 type gpuWorkloadQuery struct {
 	metricName       string
 	baseQuery        map[string]string
 	appendToPrevious bool
+	queryFunc        map[string]func(string) string
+	useSubquery      map[string]bool
 }
 
 func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
@@ -900,8 +926,14 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 		{
 			metricName: common.CamelCase(common.Gpu, common.Utilization),
 			baseQuery: map[string]string{
-				common.Dcgm:     common.SafeDcgmGpuUtilizationQuery,
+				common.Dcgm:     "DCGM_FI_DEV_GPU_UTIL{}",
 				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_sm_utilization_percent_seconds_total", common.Avg, sampleRate),
+			},
+			queryFunc: map[string]func(string) string{
+				common.Dcgm: common.SafeUtilizationQuery,
+			},
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
 			},
 		},
 		{
@@ -911,19 +943,32 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 				common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_container_requests", nil, common.Namespace, common.Pod, common.Container),
 			},
 			appendToPrevious: true,
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
+			},
 		},
 		{
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Utilization),
 			baseQuery: map[string]string{
-				common.Dcgm:     "100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{})",
+				common.Dcgm:     "(100 * DCGM_FI_DEV_FB_USED{} / (DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}))",
 				common.KubexGpu: makeKubexGpuQuery("kubex_gpu_container_memory_footprint_percent", common.Avg, 0),
+			},
+			useSubquery: map[string]bool{
+				common.Dcgm:     true,
+				common.KubexGpu: true,
 			},
 		},
 		{
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
 			baseQuery: map[string]string{
 				common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
-				common.KubexGpu: fmt.Sprintf("(kubex_gpu_container_memory_bytes{} / %d)", common.Mib),
+				common.KubexGpu: "kubex_gpu_container_memory_bytes{}",
+			},
+			queryFunc: map[string]func(string) string{
+				common.KubexGpu: toMib,
+			},
+			useSubquery: map[string]bool{
+				common.KubexGpu: true,
 			},
 		},
 		{
@@ -948,21 +993,32 @@ func makeKubexGpuQuery(metric string, agg string, sampleRate uint64, extraLabels
 	return fmt.Sprintf("max by (%s) (%s by (%s) (%s))", byExc, agg, byInc, fn)
 }
 
-var gpuAggregators = []string{common.Avg, common.Max}
+var aggregators = []string{common.Avg, common.Max}
 
-var gpuAggOverTime = map[string]func(string, string) string{
-	common.Dcgm:     common.DcgmAggOverTimeQuery,
-	common.KubexGpu: common.AggOverTimeQuery,
+var dqg = &common.GpuQueryGenerator{
+	DcgmLabelReplace: true,
+}
+
+var kqg = &common.GpuQueryGenerator{}
+
+var gqgs = map[string]*common.GpuQueryGenerator{
+	common.Dcgm:     dqg,
+	common.KubexGpu: kqg,
+}
+
+func toMib(q string) string {
+	return fmt.Sprintf("(%s / %d)", q, common.Mib)
 }
 
 func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) {
 	ge := node.DetermineGpuExporter(range5Min)
-	if ge == common.Empty {
+	gqg := gqgs[ge]
+	if gqg == nil {
 		return
 	}
 	gpuWorkloadQueries := makeGpuWorkloadQueries(sampleRate)
 	wq.aggregatorAsSuffix = true
-	for _, agg := range gpuAggregators {
+	for _, agg := range aggregators {
 		for _, gwq := range gpuWorkloadQueries {
 			baseQuery := gwq.baseQuery[ge]
 			if baseQuery == common.Empty {
@@ -972,7 +1028,9 @@ func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) 
 			if gwq.appendToPrevious {
 				wq.baseQuery += baseQuery
 			} else {
-				wq.baseQuery = gpuAggOverTime[ge](baseQuery, agg)
+				gqg.F = gwq.queryFunc[ge]
+				gqg.UseSubquery = gwq.useSubquery[ge]
+				wq.baseQuery = gqg.GpuAggOverTimeQuery(baseQuery, agg)
 			}
 			wq.aggregators = map[string]string{agg: common.Empty}
 			getWorkload(wq)

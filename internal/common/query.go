@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type QueryAdjuster func(string) string
@@ -169,7 +170,7 @@ func FormatRepeatedAuto(format string, v any, other ...any) string {
 	n2 := len(other)
 	n := n1 + n2
 	if n == 0 {
-		return fmt.Sprintf(format)
+		return format
 	}
 	args := make([]any, n1, n)
 	for i := range n1 {
@@ -190,17 +191,48 @@ func EphemeralExporterLabelReplace(query string) string {
 }
 
 func AggOverTimeQuery(q string, agg string) string {
-	return fmt.Sprintf("%s_over_time(%s[%v:])", agg, q, Step)
+	return aggOverTimeQuery(q, agg, Step, UnknownValue)
 }
 
-func DcgmAggOverTimeQuery(q string, agg string) string {
-	return AggOverTimeQuery(DcgmExporterLabelReplace(q), agg)
+func aggOverTimeQuery(q string, agg string, interval time.Duration, scrapeMultiplier int) string {
+	var intervalSuffix string
+	switch {
+	case scrapeMultiplier == 0:
+		intervalSuffix = colon
+	case scrapeMultiplier > 0:
+		intervalSuffix = fmt.Sprintf("%s%s%d", colon, Asterisk, scrapeMultiplier)
+	}
+	return fmt.Sprintf("%s(%s[%v%s])", AggOverTime(agg), q, interval, intervalSuffix)
+}
+
+type GpuQueryGenerator struct {
+	F                WrapperGenerator
+	UseSubquery      bool
+	DcgmLabelReplace bool
+}
+
+func (dqg *GpuQueryGenerator) GpuAggOverTimeQuery(q string, agg string) (qry string) {
+	var sm int
+	if dqg.UseSubquery {
+		sm = 1
+	} else {
+		sm = UnknownValue
+	}
+	qry = generateOrOrigin(aggOverTimeQuery(q, agg, Step, sm), dqg.F)
+	if dqg.DcgmLabelReplace {
+		qry = DcgmExporterLabelReplace(qry)
+	}
+	return
+}
+
+func SafeUtilizationQuery(q string) string {
+	return fmt.Sprintf("(%s <= 100)", q)
 }
 
 // SafeDcgmGpuUtilizationQuery is a query that checks if the GPU utilization is capped by 100%.
 // Required as in some cases in the wild we've observed values like 100,000%, which mess up averaging and other calculations.
 // Not clear if this was caused by a GPU which is pegged to 100% or an issue in DCGM exporter
-var SafeDcgmGpuUtilizationQuery = fmt.Sprintf("(%s <= 100)", DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
+var SafeDcgmGpuUtilizationQuery = SafeUtilizationQuery(DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 
 func PercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
 	var suffixPrefix string
