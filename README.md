@@ -16,6 +16,9 @@ This image is deployed as part of the [kubex-automation-stack Helm chart](https:
 - kube-state-metrics
 - node-exporter
 - DCGM exporter (for GPU monitoring)
+- gpu-process-exporter
+- k8s-ephemeral-storage-metrics
+- Beyla
 
 For installation instructions, configuration details, and requirements, please refer to the [kubex-automation-stack documentation](https://github.com/densify-dev/kubex-automation-stack).
 
