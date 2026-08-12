@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -355,7 +356,11 @@ func CalculateScrapeIntervals() (err error) {
 		if len(exp.repLabels) > 0 {
 			labelSelector = Join(nonEmptyLabel+Comma, exp.repLabels...) + nonEmptyLabel
 		}
-		query = fmt.Sprintf(`max(count_over_time(%s{%s}[%v])) by (job)`, exp.repMetric, labelSelector, Interval)
+		var byJob string
+		if !exp.ignoreJobLabel {
+			byJob = " by (job)"
+		}
+		query = fmt.Sprintf(`max(count_over_time(%s{%s}[%v]))%s`, exp.repMetric, labelSelector, Interval, byJob)
 		_, err = CollectAndProcessMetric(query, et, exp.scrapeIntervalFromRepQuery)
 	}
 	query = fmt.Sprintf(`max(sum_over_time(up{}[%v])) by (job)`, Interval)
@@ -406,18 +411,19 @@ const (
 )
 
 type exporter struct {
-	name          string
-	metricsPrefix string
-	repMetric     string
-	repLabels     []string
-	logAllMetrics bool
+	name           string
+	metricsPrefix  string
+	repMetric      string
+	repLabels      []string
+	logAllMetrics  bool
+	ignoreJobLabel bool
 }
 
 type clusterExporter struct {
 	exporter
 	promJob              string
-	ActualScrapeInterval time.Duration // exported for fmt pretty-printing
-	UpScrapeInterval     time.Duration // exported for fmt pretty-printing
+	ActualScrapeInterval time.Duration
+	UpScrapeInterval     time.Duration
 }
 
 func (e *exporter) getPrefix() string {
@@ -448,10 +454,11 @@ func (e *exporter) scrapeIntervalFromRepQuery(cluster string, result model.Matri
 		clusterExportersByJob[cluster] = make(map[string][]*clusterExporter, l)
 	}
 	for _, ss := range result {
-		if jobName := GetValue(ss, Job); jobName != Empty {
-			ce := &clusterExporter{exporter: *e, promJob: jobName}
-			setScrapeInterval(&ce.ActualScrapeInterval, ss)
-			clusterExporters[cluster][e.metricsPrefix] = ce
+		jobName := GetValue(ss, Job)
+		ce := &clusterExporter{exporter: *e, promJob: jobName}
+		setScrapeInterval(&ce.ActualScrapeInterval, ss, cluster, ce.name, "rep metric")
+		clusterExporters[cluster][e.metricsPrefix] = ce
+		if jobName != Empty {
 			clusterExportersByJob[cluster][jobName] = append(clusterExportersByJob[cluster][jobName], ce)
 		}
 	}
@@ -462,38 +469,64 @@ func scrapeIntervalFromUp(cluster string, result model.Matrix) {
 		if jobName := GetValue(ss, Job); jobName != Empty {
 			for _, ce := range clusterExportersByJob[cluster][jobName] {
 				if ce != nil {
-					setScrapeInterval(&ce.UpScrapeInterval, ss)
+					setScrapeInterval(&ce.UpScrapeInterval, ss, cluster, ce.name, "up")
 				}
 			}
 		}
 	}
 }
 
-func setScrapeInterval(target *time.Duration, ss *model.SampleStream) {
-	if len(ss.Values) > 0 {
-		*target = (Interval / time.Duration(ss.Values[0].Value)).Round(time.Second)
+func setScrapeInterval(target *time.Duration, ss *model.SampleStream, cluster, exporter, src string) {
+	if si, err := validateScrapeInterval(ss); err == nil {
+		*target = si
+		LogCluster(1, Debug, ClusterFormat+" exporter=%s scrape interval from %s: %v", cluster, true, cluster, exporter, src, si)
+	} else {
+		LogCluster(1, Warn, ClusterFormat+" exporter=%s scrape interval from %s error=%v", cluster, true, cluster, exporter, src, err)
 	}
+
+}
+
+const (
+	// Openshift has scrape configs of 2m (ksm, ossm), we allow for a margin but no more than that
+	// Anything less frequent is probably an exporter added during the hour and should be ignored
+	maxAllowedScrapeInterval = time.Second * 130
+	defaultScrapeInterval    = time.Minute
+)
+
+func validateScrapeInterval(ss *model.SampleStream) (si time.Duration, err error) {
+	if len(ss.Values) == 0 {
+		err = errors.New("no values in sample stream")
+		return
+	}
+	si = (Interval / time.Duration(ss.Values[0].Value)).Round(time.Second)
+	switch {
+	case si <= 0:
+		err = errors.New("invalid scrape interval")
+	case si > maxAllowedScrapeInterval:
+		err = fmt.Errorf("scrape interval %v exceeds maximum allowed %v", si, maxAllowedScrapeInterval)
+	}
+	return
 }
 
 var exporters = makeExporters()
 
 func makeExporters() map[string]*exporter {
-	exps := make(map[string]*exporter, 7)
-	addExporter(exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false)
-	addExporter(exps, nodeExporter, "node_cpu_seconds_total", nil, false)
-	addExporter(exps, ksm, "kube_pod_info", nil, false)
-	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false)
-	addExporter(exps, Dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true)
-	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true)
-	addExporter(exps, KubexGpu, "kubex_gpu_container_requests", nil, true)
-	addExporter(exps, Beyla, SurveyInfo, nil, true)
-	addExporter(exps, CustomMetrics, "custom_container_memory_usage_1", []string{Container}, true)
-	addExporter(exps, JmxExporter, "jvm_runtime_info", []string{Container}, false)
+	exps := make(map[string]*exporter, 10)
+	addExporter(exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false, false)
+	addExporter(exps, nodeExporter, "node_cpu_seconds_total", nil, false, false)
+	addExporter(exps, ksm, "kube_pod_info", nil, false, false)
+	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false, false)
+	addExporter(exps, Dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true, false)
+	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true, false)
+	addExporter(exps, KubexGpu, "kubex_gpu_container_requests", nil, true, false)
+	addExporter(exps, Beyla, SurveyInfo, nil, true, true)
+	addExporter(exps, CustomMetrics, "custom_container_memory_sizing_bytes", []string{Container}, true, true)
+	addExporter(exps, JmxExporter, "jvm_runtime_info", []string{Container}, false, false)
 	return exps
 }
 
-func addExporter(exps map[string]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool) {
-	exps[name] = &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics}
+func addExporter(exps map[string]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool, ignoreJobLabel bool) {
+	exps[name] = &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics, ignoreJobLabel: ignoreJobLabel}
 }
 
 var clusterExporters = make(map[string]map[string]*clusterExporter)
@@ -760,6 +793,10 @@ func getScrapeInterval(cluster string, metricName string) (si time.Duration) {
 		} else {
 			si = e.UpScrapeInterval
 		}
+	}
+	if si == 0 {
+		LogCluster(1, Warn, ClusterFormat+" scrape interval for metric %s not found, using default scrape interval %v", cluster, true, cluster, metricName, defaultScrapeInterval)
+		si = defaultScrapeInterval
 	}
 	return
 }

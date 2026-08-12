@@ -60,7 +60,8 @@ var nodeLabelToProviderType = map[model.LabelName]NodeLabelProviderType{
 }
 
 var (
-	labelCoreQueryFmt = fmt.Sprintf(`%s{%s=~".+"}`, NodeLabelMetric, common.DefaultFmt)
+	labelCoreQueryFmt     = fmt.Sprintf(`%s{%s=~".+"}`, NodeLabelMetric, common.DefaultFmt)
+	nodeGroupCoreQueryFmt = fmt.Sprintf(`max by (node, %s) (%s{%s=~".+"})`, common.DefaultFmt, NodeLabelMetric, common.DefaultFmt)
 )
 
 func GetProviderType(ln model.LabelName) NodeLabelProviderType {
@@ -77,7 +78,7 @@ func (lf *labelFeature) Type() featureType {
 }
 
 func (lf *labelFeature) NodeAndGroupCoreQueryFmt() string {
-	return labelCoreQueryFmt
+	return nodeGroupCoreQueryFmt
 }
 
 func (lf *labelFeature) LabelNames() []model.LabelName {
