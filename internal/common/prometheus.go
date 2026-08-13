@@ -498,11 +498,12 @@ func validateScrapeInterval(ss *model.SampleStream) (si time.Duration, err error
 		err = errors.New("no values in sample stream")
 		return
 	}
-	si = (Interval / time.Duration(ss.Values[0].Value)).Round(time.Second)
-	switch {
-	case si <= 0:
-		err = errors.New("invalid scrape interval")
-	case si > maxAllowedScrapeInterval:
+	sampleCount := time.Duration(ss.Values[0].Value)
+	if sampleCount <= 0 {
+		err = errors.New("invalid scrape sample count")
+		return
+	}
+	if si = (Interval / sampleCount).Round(time.Second); si > maxAllowedScrapeInterval {
 		err = fmt.Errorf("scrape interval %v exceeds maximum allowed %v", si, maxAllowedScrapeInterval)
 	}
 	return
