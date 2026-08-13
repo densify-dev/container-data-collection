@@ -854,20 +854,25 @@ func getCpuWorkloads(wq *workloadQuery) {
 }
 
 func cpuQueryMap() map[string][]*baseWorkloadQuery {
-	mName := common.CamelCase(common.Cpu, common.MCoresSt)
+	mNameElements := []string{custom, common.Cpu, common.MCoresSt}
+	metrics := map[string]string{
+		common.CamelCase(mNameElements[1:]...): "container_cpu_usage_seconds_total",
+		common.CamelCase(mNameElements...):     "custom_container_cpu_sizing_seconds_total",
+	}
+	var maxBaseWqw, avgBaseWqw []*baseWorkloadQuery
+	for mName, metric := range metrics {
+		maxBaseWqw = append(maxBaseWqw, &baseWorkloadQuery{
+			metricName: mName,
+			baseQuery:  fmt.Sprintf(`%s(round(1000 * irate(%s{name!~"k8s_POD_.*"}[*3]), 1)[%dm:*1])`, common.AggOverTime(common.Max), metric, common.Params.Collection.SampleRate),
+		})
+		avgBaseWqw = append(avgBaseWqw, &baseWorkloadQuery{
+			metricName: mName,
+			baseQuery:  fmt.Sprintf(`1000 * rate(%s{name!~"k8s_POD_.*"}[%dm])`, metric, common.Params.Collection.SampleRate),
+		})
+	}
 	return map[string][]*baseWorkloadQuery{
-		common.Max: {
-			{
-				metricName: mName,
-				baseQuery:  fmt.Sprintf(`%s(round(1000 * irate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[*3]), 1)[%dm:*1])`, common.AggOverTime(common.Max), common.Params.Collection.SampleRate),
-			},
-		},
-		common.Avg: {
-			{
-				metricName: mName,
-				baseQuery:  fmt.Sprintf(`1000 * rate(container_cpu_usage_seconds_total{name!~"k8s_POD_.*"}[%dm])`, common.Params.Collection.SampleRate),
-			},
-		},
+		common.Max: maxBaseWqw,
+		common.Avg: avgBaseWqw,
 	}
 }
 
@@ -890,9 +895,10 @@ func memQueryMap() map[string][]*baseWorkloadQuery {
 		common.Max: common.Empty,
 	}
 	metrics := map[string]string{
-		common.Mem:        `container_memory_usage_bytes{name!~"k8s_POD_.*"}`,
-		rss:               `container_memory_rss{name!~"k8s_POD_.*"}`,
-		common.WorkingSet: `container_memory_working_set_bytes{name!~"k8s_POD_.*"}`,
+		common.Mem:                              `container_memory_usage_bytes{name!~"k8s_POD_.*"}`,
+		rss:                                     `container_memory_rss{name!~"k8s_POD_.*"}`,
+		common.WorkingSet:                       `container_memory_working_set_bytes{name!~"k8s_POD_.*"}`,
+		common.CamelCase(custom, common.Memory): `custom_container_memory_sizing_bytes{name!~"k8s_POD_.*"}`,
 	}
 	for _, agg := range aggregators {
 		for mName, metric := range metrics {
