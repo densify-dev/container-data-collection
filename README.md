@@ -10,7 +10,7 @@ This repository contains the source code for the Kubex Collector image. The Kube
 
 ## Deployment
 
-This image is deployed as part of the [kubex-automation-stack Helm chart](https://github.com/densify-dev/kubex-automation-stack), which bundles all required dependencies including:
+This image is deployed as part of the [kubex-automation-stack Helm chart](https://github.com/densify-dev/helm-charts/tree/master/charts/kubex-automation-stack), which bundles all required dependencies including:
 - Prometheus
 - cAdvisor  
 - kube-state-metrics
@@ -20,7 +20,7 @@ This image is deployed as part of the [kubex-automation-stack Helm chart](https:
 - k8s-ephemeral-storage-metrics
 - Beyla
 
-For installation instructions, configuration details, and requirements, please refer to the [kubex-automation-stack documentation](https://github.com/densify-dev/kubex-automation-stack).
+For installation instructions, configuration details, and requirements, please refer to the [kubex-automation-stack documentation](https://github.com/densify-dev/helm-charts/tree/master/charts/kubex-automation-stack).
 
 ## Docker Images
 
