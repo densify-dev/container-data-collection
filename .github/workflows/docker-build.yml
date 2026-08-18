@@ -108,7 +108,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Run Docker Scout vulnerability scanner
-        uses: docker/scout-action@v1.21.0
+        uses: docker/scout-action@v1.24.0
         with:
           command: 'cves'
           image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
