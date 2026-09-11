@@ -71,8 +71,8 @@ threadCount:    `sum by (namespace, pod, container) (max by (namespace, pod, con
 	},
 	common.JmxExporter: {
 		jvmRuntimeInfo: common.LabelReplace(common.LabelReplace("jvm_runtime_info{}", nameLabel, nameLabelJmx, common.HasValue), versionLabel, versionLabelJmx, common.HasValue),
-		heapInit:       `jvm_memory_init_bytes{area="heap"}`,
-		heapMax:        `jvm_memory_max_bytes{area="heap"}`,
+		heapInit:       `sum by (namespace, pod, container) (jvm_memory_init_bytes{area="heap"})`,
+		heapMax:        `sum by (namespace, pod, container) (jvm_memory_max_bytes{area="heap"})`
 		heapUsed:       `jvm_memory_used_bytes{area="heap"}`,
 		nonHeapUsed:    `jvm_memory_used_bytes{area="nonheap"}`,
 		buffersUsed:    `sum by (namespace, pod, container) (max by (namespace, pod, container, pool) (jvm_buffer_pool_used_bytes{}))`,
