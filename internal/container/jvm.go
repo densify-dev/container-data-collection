@@ -103,8 +103,8 @@ func getJvmQuery(otelJavaAgent, jmxExporter bool, what string) (qry string) {
 	switch len(qs) {
 	case 1:
 		qry = fmt.Sprintf("(%s)", qs[0])
-	case 2:
-		qry = fmt.Sprintf("((%s) or (%s))", qs[0], qs[1])
+case 2:
+		qry = fmt.Sprintf("((%s) or on (namespace, pod, container) (%s))", qs[0], qs[1])
 	}
 	return
 }
