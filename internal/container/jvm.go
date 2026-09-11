@@ -41,7 +41,7 @@ type JvmRuntimeDetails struct {
 func (jrtd *JvmRuntimeDetails) runtimeDetails() {}
 
 func jvmRuntimeDetails(r *Runtime) (jrtd *JvmRuntimeDetails, ok bool) {
-	if r.IsValid() && r.Name == JvmRuntimeName {
+if r.IsValid() && r.Name == JvmRuntimeName && r.RuntimeDetails != nil {
 		jrtd, ok = r.RuntimeDetails.Data.(*JvmRuntimeDetails)
 	}
 	return
