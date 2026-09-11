@@ -23,11 +23,11 @@ type RuntimeDetailsDTO struct {
 }
 
 type Runtime struct {
-	Name           string            `json:"name"`
-	Version        string            `json:"version,omitempty"`
-	RuntimeDetails RuntimeDetailsDTO `json:"runtimeDetails,omitempty"`
-	fpOnce         sync.Once         `json:"-"`
-	fingerprint    uint64            `json:"-"`
+	Name           string             `json:"name"`
+	Version        string             `json:"version,omitempty"`
+	RuntimeDetails *RuntimeDetailsDTO `json:"runtimeDetails,omitempty"`
+	fpOnce         sync.Once          `json:"-"`
+	fingerprint    uint64             `json:"-"`
 }
 
 func (r *Runtime) Fingerprint() uint64 {

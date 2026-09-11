@@ -302,7 +302,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			rt := &Runtime{
 				Name:    JvmRuntimeName,
 				Version: version,
-				RuntimeDetails: RuntimeDetailsDTO{
+				RuntimeDetails: &RuntimeDetailsDTO{
 					Type: JvmRuntimeName,
 					Data: &JvmRuntimeDetails{
 						RuntimeProcessFields: rtp,
