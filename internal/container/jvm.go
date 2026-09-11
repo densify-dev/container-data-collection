@@ -66,15 +66,15 @@ var jvmQueries = map[string]map[string]string{
 		nonHeapUsed:    `sum by (namespace, pod, container) (max by (namespace, pod, container, jvm_memory_type, jvm_memory_pool_name) (jvm_memory_used_bytes{jvm_memory_type="non_heap"}))`,
 		buffersUsed:    `sum by (namespace, pod, container) (max by (namespace, pod, container, jvm_buffer_pool_name) (jvm_buffer_memory_used_bytes{}))`,
 		postGcUsed:     `sum by (namespace, pod, container) (max by (namespace, pod, container, jvm_memory_type, jvm_memory_pool_name) (jvm_memory_used_after_last_gc_bytes{}))`,
-threadCount:    `sum by (namespace, pod, container) (max by (namespace, pod, container, jvm_thread_daemon, jvm_thread_state) (jvm_thread_count{}))`
+		threadCount:    `sum by (namespace, pod, container) (max by (namespace, pod, container, jvm_thread_daemon, jvm_thread_state) (jvm_thread_count{}))`,
 		gc:             "jvm_gc_duration_seconds_sum",
 	},
 	common.JmxExporter: {
 		jvmRuntimeInfo: common.LabelReplace(common.LabelReplace("jvm_runtime_info{}", nameLabel, nameLabelJmx, common.HasValue), versionLabel, versionLabelJmx, common.HasValue),
-		heapInit:       `sum by (namespace, pod, container) (jvm_memory_init_bytes{area="heap"})`,
-		heapMax:        `sum by (namespace, pod, container) (jvm_memory_max_bytes{area="heap"})`
-		heapUsed:       `jvm_memory_used_bytes{area="heap"}`,
-		nonHeapUsed:    `jvm_memory_used_bytes{area="nonheap"}`,
+		heapInit:       `max by (namespace, pod, container) (jvm_memory_init_bytes{area="heap"})`,
+		heapMax:        `max by (namespace, pod, container) (jvm_memory_max_bytes{area="heap"})`,
+		heapUsed:       `max by (namespace, pod, container) (jvm_memory_used_bytes{area="heap"})`,
+		nonHeapUsed:    `max by (namespace, pod, container) (jvm_memory_used_bytes{area="nonheap"})`,
 		buffersUsed:    `sum by (namespace, pod, container) (max by (namespace, pod, container, pool) (jvm_buffer_pool_used_bytes{}))`,
 		postGcUsed:     `sum by (namespace, pod, container) (max by (namespace, pod, container, pool) (jvm_memory_pool_collection_used_bytes{}))`,
 		threadCount:    `max by (namespace, pod, container) (jvm_threads_current{})`,
