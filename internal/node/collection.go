@@ -62,6 +62,7 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			switch res {
 			case common.Cpu:
 				setValue(&n.cpuCapacity, value)
+				setValue(&n.cpuCapacityMcores, common.MCores(value))
 			case common.Memory:
 				setValue(&n.memCapacity, value)
 			case model.LabelValue(common.NvidiaGpuResource):
@@ -77,6 +78,7 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			switch res {
 			case common.Cpu:
 				setValue(&n.cpuAllocatable, value)
+				setValue(&n.cpuAllocatableMcores, common.MCores(value))
 			case common.Memory:
 				setValue(&n.memAllocatable, value)
 			case model.LabelValue(common.NvidiaGpuResource):
@@ -93,12 +95,14 @@ func (mh *metricHolder) getNodeMetric(cluster string, result model.Matrix) {
 			}
 		case common.CpuCapacity:
 			setValue(&n.cpuCapacity, value)
+			setValue(&n.cpuCapacityMcores, common.MCores(value))
 		case common.MemCapacity:
 			setValue(&n.memCapacity, value)
 		case common.PodsCapacity:
 			setValue(&n.podsCapacity, value)
 		case common.CpuAllocatable:
 			setValue(&n.cpuAllocatable, value)
+			setValue(&n.cpuAllocatableMcores, common.MCores(value))
 		case common.MemAllocatable:
 			setValue(&n.memAllocatable, value)
 		case common.PodsAllocatable:

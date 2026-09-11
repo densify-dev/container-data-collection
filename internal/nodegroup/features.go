@@ -61,7 +61,7 @@ func QueryWrappersMap(cf clusterFeature) map[string]*node.QueryWrapper {
 	suffix := QuerySuffixFmt(cf, common.Metric, true)
 	podIpSuffix := ByPodIpMetricSuffixFmt(cf)
 	return map[string]*node.QueryWrapper{
-		node.HasInstanceLabelPodIp: {
+		common.HasInstanceLabelPodIp: {
 			Query: &common.WorkloadQueryWrapper{
 				Prefix: "sum(max(label_replace(",
 				Suffix: podIpSuffix,
@@ -72,7 +72,7 @@ func QueryWrappersMap(cf clusterFeature) map[string]*node.QueryWrapper {
 			},
 			MetricField: []model.LabelName{common.Node},
 		},
-		node.HasNodeLabel: {
+		common.HasNodeLabel: {
 			Query: &common.WorkloadQueryWrapper{
 				Prefix: "sum(",
 				Suffix: suffix,
@@ -83,7 +83,7 @@ func QueryWrappersMap(cf clusterFeature) map[string]*node.QueryWrapper {
 			},
 			MetricField: []model.LabelName{common.Node},
 		},
-		node.HasInstanceLabelOther: {
+		common.HasInstanceLabelOther: {
 			Query: &common.WorkloadQueryWrapper{
 				Prefix: "sum(label_replace(",
 				Suffix: `, "node", "$1", "instance", "(.*)")` + suffix,

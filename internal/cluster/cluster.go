@@ -141,17 +141,17 @@ func writeAttrs(name string, cl *cluster) {
 }
 
 var queryWrappersMap = map[string]*node.QueryWrapper{
-	node.HasNodeLabel: {
+	common.HasNodeLabel: {
 		Query:       &common.WorkloadQueryWrapper{},
 		SumQuery:    &common.WorkloadQueryWrapper{},
 		MetricField: []model.LabelName{common.Node},
 	},
-	node.HasInstanceLabelPodIp: {
+	common.HasInstanceLabelPodIp: {
 		Query:       &common.WorkloadQueryWrapper{},
 		SumQuery:    &common.WorkloadQueryWrapper{},
 		MetricField: []model.LabelName{common.Instance},
 	},
-	node.HasInstanceLabelOther: {
+	common.HasInstanceLabelOther: {
 		Query:       &common.WorkloadQueryWrapper{},
 		SumQuery:    &common.WorkloadQueryWrapper{},
 		MetricField: []model.LabelName{common.Instance},
@@ -194,7 +194,7 @@ func Metrics() {
 	common.GetConditionalMetricsWorkload(indicators, common.Requests, map[string][]model.LabelName{common.Empty: nil}, common.ClusterEntityKind, common.Metric)
 
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
-	if !node.HasNodeExporter(range5Min) {
+	if !common.HasNodeExporter(range5Min) {
 		err := fmt.Errorf("prometheus node exporter metrics not present for any cluster")
 		common.LogError(err, "entity=%s", common.ClusterEntityKind)
 		return
