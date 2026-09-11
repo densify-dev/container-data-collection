@@ -17,12 +17,17 @@ type RuntimeDetails interface {
 	runtimeDetails()
 }
 
+type RuntimeDetailsDTO struct {
+	Type string         `json:"type"`
+	Data RuntimeDetails `json:"data,omitempty"`
+}
+
 type Runtime struct {
-	Name           string         `json:"name"`
-	Version        string         `json:"version,omitempty"`
-	RuntimeDetails RuntimeDetails `json:"runtimeDetails,omitempty"`
-	fpOnce         sync.Once      `json:"-"`
-	fingerprint    uint64         `json:"-"`
+	Name           string            `json:"name"`
+	Version        string            `json:"version,omitempty"`
+	RuntimeDetails RuntimeDetailsDTO `json:"runtimeDetails,omitempty"`
+	fpOnce         sync.Once         `json:"-"`
+	fingerprint    uint64            `json:"-"`
 }
 
 func (r *Runtime) Fingerprint() uint64 {
@@ -102,10 +107,11 @@ func (r *Runtime) IsValid() bool {
 	return r != nil && r.Name != common.Empty
 }
 
-type ProcessRuntimeDetails struct {
-	ExePath string   `json:"exePath,omitempty"`
-	Args    []string `json:"args,omitempty"`
-	Pid     int      `json:"pid,omitempty"`
+type RuntimeProcessFields struct {
+	CommandArgs []string          `json:"commandArgs,omitempty"`
+	Environment map[string]string `json:"environment,omitempty"`
+	CommandExe  string            `json:"commandExe,omitempty"`
+	Pid         int               `json:"pid,omitempty"`
 }
 
 const (
@@ -114,7 +120,7 @@ const (
 	pidLabel  = "process_pid"
 )
 
-func parseProcessRuntimeDetails(ss *model.SampleStream) (prtd *ProcessRuntimeDetails, err error) {
+func parseProcessRuntimeFields(ss *model.SampleStream) (rtp *RuntimeProcessFields, err error) {
 	var args []string
 	var argsLabelValue, exePath, pidStr string
 	var pid int
@@ -130,10 +136,10 @@ func parseProcessRuntimeDetails(ss *model.SampleStream) (prtd *ProcessRuntimeDet
 			return
 		}
 	}
-	prtd = &ProcessRuntimeDetails{
-		ExePath: exePath,
-		Args:    args,
-		Pid:     pid,
+	rtp = &RuntimeProcessFields{
+		CommandArgs: args,
+		CommandExe:  exePath,
+		Pid:         pid,
 	}
 	return
 }

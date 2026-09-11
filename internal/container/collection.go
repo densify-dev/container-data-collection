@@ -295,17 +295,23 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			runtimeName, _ := common.GetLabelValue(ss, nameLabel)
 			description, _ := common.GetLabelValue(ss, descLabel)
 			vendor, _ := common.GetLabelValue(ss, vendorLabel)
-			prtd, _ := parseProcessRuntimeDetails(ss)
+			rtp := RuntimeProcessFields{}
+			if rtpp, _ := parseProcessRuntimeFields(ss); rtpp != nil {
+				rtp = *rtpp
+			}
 			rt := &Runtime{
 				Name:    JvmRuntimeName,
 				Version: version,
-				RuntimeDetails: &JvmRuntimeDetails{
-					ProcessRuntimeDetails: *prtd,
-					Description:           description,
-					Name:                  runtimeName,
-					Vendor:                vendor,
-					heapInitMib:           common.UnknownValueFloat,
-					heapMaxMib:            common.UnknownValueFloat,
+				RuntimeDetails: RuntimeDetailsDTO{
+					Type: JvmRuntimeName,
+					Data: &JvmRuntimeDetails{
+						RuntimeProcessFields: rtp,
+						Description:          description,
+						Name:                 runtimeName,
+						Vendor:               vendor,
+						heapInitMib:          common.UnknownValueFloat,
+						heapMaxMib:           common.UnknownValueFloat,
+					},
 				},
 			}
 			c.runtimes.updateRuntime(rt)

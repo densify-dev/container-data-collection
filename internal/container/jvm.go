@@ -30,7 +30,7 @@ const (
 )
 
 type JvmRuntimeDetails struct {
-	ProcessRuntimeDetails
+	RuntimeProcessFields
 	Description string  `json:"description,omitempty"`
 	Name        string  `json:"name,omitempty"`
 	Vendor      string  `json:"vendor,omitempty"`
@@ -42,7 +42,7 @@ func (jrtd *JvmRuntimeDetails) runtimeDetails() {}
 
 func jvmRuntimeDetails(r *Runtime) (jrtd *JvmRuntimeDetails, ok bool) {
 	if r.IsValid() && r.Name == JvmRuntimeName {
-		jrtd, ok = r.RuntimeDetails.(*JvmRuntimeDetails)
+		jrtd, ok = r.RuntimeDetails.Data.(*JvmRuntimeDetails)
 	}
 	return
 }
@@ -76,7 +76,7 @@ var jvmQueries = map[string]map[string]string{
 		heapUsed:       `jvm_memory_used_bytes{area="heap"}`,
 		nonHeapUsed:    `jvm_memory_used_bytes{area="nonheap"}`,
 		buffersUsed:    `sum by (namespace, pod, container) (max by (namespace, pod, container, pool) (jvm_buffer_pool_used_bytes{}))`,
-		postGcUsed:     "", // no such query for JMX Exporter
+		postGcUsed:     `sum by (namespace, pod, container) (max by (namespace, pod, container, pool) (jvm_memory_pool_collection_used_bytes{}))`,
 		threadCount:    `max by (namespace, pod, container) (jvm_threads_current{})`,
 		gc:             "jvm_gc_collection_seconds_sum",
 	},
@@ -135,26 +135,14 @@ func getJvmWorkloads(wq *workloadQuery) {
 		common.Avg: " / (1024 * 1024)",
 		common.Max: " / (1024 * 1024)",
 	}
-	wq.aggregators = suffixes
 	metrics := []string{heapUsed, nonHeapUsed, buffersUsed, postGcUsed}
-	for _, mName := range metrics {
-		wq.baseQuery = getJvmQuery(otelJavaAgent, jmxExporter, mName)
-		wq.metricName = mName
-		getWorkload(wq)
-	}
-	//	getAvgMaxSeparateQueries(wq, jvmQueryMap(otelJavaAgent, jmxExporter, suffixes, metrics))
+	getAvgMaxSeparateQueries(wq, jvmQueryMap(otelJavaAgent, jmxExporter, suffixes, metrics))
 	suffixes = map[string]string{
 		common.Avg: common.Empty,
 		common.Max: common.Empty,
 	}
-	wq.aggregators = suffixes
 	metrics = []string{threadCount}
-	for _, mName := range metrics {
-		wq.baseQuery = getJvmQuery(otelJavaAgent, jmxExporter, mName)
-		wq.metricName = mName
-		getWorkload(wq)
-	}
-	//	getAvgMaxSeparateQueries(wq, jvmQueryMap(otelJavaAgent, jmxExporter, suffixes, metrics))
+	getAvgMaxSeparateQueries(wq, jvmQueryMap(otelJavaAgent, jmxExporter, suffixes, metrics))
 	updateJvmQueries()
 	wq.metricName = gcOverheadPct
 	wq.aggregators = suffixes
@@ -168,7 +156,7 @@ func jvmQueryMap(otelJavaAgent, jmxExporter bool, suffixes map[string]string, me
 	for _, agg := range aggregators {
 		for _, mName := range metrics {
 			metric := getJvmQuery(otelJavaAgent, jmxExporter, mName)
-			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg])
+			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg], 1)
 		}
 	}
 	return queryMap

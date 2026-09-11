@@ -191,10 +191,10 @@ func EphemeralExporterLabelReplace(query string) string {
 }
 
 func AggOverTimeQuery(q string, agg string) string {
-	return aggOverTimeQuery(q, agg, Step, UnknownValue)
+	return AggOverTimeQuerySubQueries(q, agg, Step, UnknownValue)
 }
 
-func aggOverTimeQuery(q string, agg string, interval time.Duration, scrapeMultiplier int) string {
+func AggOverTimeQuerySubQueries(q string, agg string, interval time.Duration, scrapeMultiplier int) string {
 	var intervalSuffix string
 	switch {
 	case scrapeMultiplier == 0:
@@ -218,7 +218,7 @@ func (dqg *GpuQueryGenerator) GpuAggOverTimeQuery(q string, agg string) (qry str
 	} else {
 		sm = UnknownValue
 	}
-	qry = generateOrOrigin(aggOverTimeQuery(q, agg, Step, sm), dqg.F)
+	qry = generateOrOrigin(AggOverTimeQuerySubQueries(q, agg, Step, sm), dqg.F)
 	if dqg.DcgmLabelReplace {
 		qry = DcgmExporterLabelReplace(qry)
 	}

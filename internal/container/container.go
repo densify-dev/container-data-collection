@@ -882,10 +882,11 @@ func getMemoryWorkloads(wq *workloadQuery) {
 	getAvgMaxSeparateQueries(wq, memQueryMap())
 }
 
-func addToQueryMap(queryMap map[string][]*baseWorkloadQuery, mName, agg, metric, suffix string) {
+func addToQueryMap(queryMap map[string][]*baseWorkloadQuery, mName, agg, metric, suffix string, scrapeMultiplier int) {
+	baseQuery := common.AggOverTimeQuerySubQueries(metric, agg, common.Step, scrapeMultiplier)
 	queryMap[agg] = append(queryMap[agg], &baseWorkloadQuery{
 		metricName: mName,
-		baseQuery:  common.AggOverTimeQuery(metric, agg),
+		baseQuery:  baseQuery,
 		aggSuffix:  suffix,
 	})
 }
@@ -904,7 +905,7 @@ func memQueryMap() map[string][]*baseWorkloadQuery {
 	}
 	for _, agg := range aggregators {
 		for mName, metric := range metrics {
-			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg])
+			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg], common.UnknownValue)
 		}
 	}
 	return queryMap

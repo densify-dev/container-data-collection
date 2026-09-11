@@ -387,7 +387,7 @@ func LogAllMetrics() (err error) {
 	for _, exp := range exporters {
 		if exp.logAllMetrics || Params.Debug {
 			query = fmt.Sprintf(allMetricsQueryFmt, prometheusMetricName, exp.metricsPrefix, Always.String())
-			query = aggOverTimeQuery(query, Last, Interval, UnknownValue)
+			query = AggOverTimeQuerySubQueries(query, Last, Interval, UnknownValue)
 			query = LabelReplace(query, metricName, prometheusMetricName, HasValue)
 			query = fmt.Sprintf(allMetricsFmt, metricName, query)
 			_, err = CollectAndProcessMetric(query, et, exp.logAllClusterMetrics)
@@ -740,7 +740,7 @@ func ResolveMetrics(m ResolveMetricMap) (err error) {
 	et := TimeRangeEndTimeOnly()
 	for mName, f := range m {
 		mr := &metricResolver{metricName: mName, f: f}
-		query := aggOverTimeQuery(mName+Braces, Present, Interval, UnknownValue)
+		query := AggOverTimeQuerySubQueries(mName+Braces, Present, Interval, UnknownValue)
 		query = fmt.Sprintf(`max(%s)`, query)
 		if _, err = CollectAndProcessMetric(query, et, mr.resolve); err != nil {
 			break
