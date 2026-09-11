@@ -41,7 +41,7 @@ type JvmRuntimeDetails struct {
 func (jrtd *JvmRuntimeDetails) runtimeDetails() {}
 
 func jvmRuntimeDetails(r *Runtime) (jrtd *JvmRuntimeDetails, ok bool) {
-if r.IsValid() && r.Name == JvmRuntimeName && r.RuntimeDetails != nil {
+	if r.IsValid() && r.Name == JvmRuntimeName && r.RuntimeDetails != nil {
 		jrtd, ok = r.RuntimeDetails.Data.(*JvmRuntimeDetails)
 	}
 	return
@@ -103,7 +103,7 @@ func getJvmQuery(otelJavaAgent, jmxExporter bool, what string) (qry string) {
 	switch len(qs) {
 	case 1:
 		qry = fmt.Sprintf("(%s)", qs[0])
-case 2:
+	case 2:
 		qry = fmt.Sprintf("((%s) or on (namespace, pod, container) (%s))", qs[0], qs[1])
 	}
 	return
