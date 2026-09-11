@@ -118,7 +118,7 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 			common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		}
 	}(attributeWrite)
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,ContainerType,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,GpuLimitFloat,GpuRequestFloat,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy,EphemeralStorageRequest,EphemeralStorageLimit,Runtimes"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,Namespace,EntityName,EntityType,ContainerName,ContainerType,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,ContainerLabels,PodLabels,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,GpuLimitFloat,GpuRequestFloat,CurrentNodes,PowerState,CreatedByKind,CreatedByName,CurrentSize,CreateTime,ContainerRestarts,NamespaceLabels,NamespaceCpuRequest,NamespaceCpuLimit,NamespaceMemoryRequest,NamespaceMemoryLimit,NamespacePodsLimit,HpaName,HpaLabels,HpaTargetMetricName,HpaTargetMetricType,HpaTargetMetricValue,HpaTargetMetrics,QosClass,GpuModel,GpuSharingStrategy,EphemeralStorageRequest,EphemeralStorageLimit,JvmHeapInitMib,JvmHeapMaxMib,Runtimes"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 		return
 	}
@@ -207,6 +207,21 @@ func writeAttrs(name string, cluster map[string]*namespace) {
 					return
 				}
 				if err = common.PrintCSVNumberValue(attributeWrite, c.ephemeralStorageLimit, false); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+				jvmHeapInitMib, jvmHeapMaxMib := common.UnknownValueFloat, common.UnknownValueFloat
+				if rt, f := c.runtimes.getRuntime(JvmRuntimeName); f {
+					if jrtd, ok := jvmRuntimeDetails(rt); ok {
+						jvmHeapInitMib = jrtd.heapInitMib
+						jvmHeapMaxMib = jrtd.heapMaxMib
+					}
+				}
+				if err = common.PrintCSVNumberValue(attributeWrite, jvmHeapInitMib, false); err != nil {
+					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
+					return
+				}
+				if err = common.PrintCSVNumberValue(attributeWrite, jvmHeapMaxMib, false); err != nil {
 					common.LogError(err, common.DefaultLogFormat, name, common.ContainerEntityKind)
 					return
 				}

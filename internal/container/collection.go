@@ -206,7 +206,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.cpuLimit = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuLimits, ss, common.MCores[float64])
 			case common.NvidiaGpuResource:
-				if node.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
+				if common.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
 					c.gpuLimit = int(value)
 					c.gpuLimitFloat = value
 					common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuLimits, ss, nil)
@@ -224,7 +224,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				c.cpuRequest = common.IntMCores(value)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.CpuRequests, ss, common.MCores[float64])
 			case common.NvidiaGpuResource:
-				if node.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
+				if common.GetGpuExporterType(range5Min, cluster) == common.Dcgm {
 					c.gpuRequest = int(value)
 					c.gpuRequestFloat = value
 					common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
@@ -234,14 +234,14 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.EphemeralStorageRequests, ss, nil)
 			}
 		case common.GpuRequest:
-			if node.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
+			if common.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
 				c.gpuRequest = int(value)
 				c.gpuRequestFloat = value
 				getKubexGpuSharingStrategy(ss, cluster, c)
 				common.WriteWorkload(cwp, containerWorkloadWriters, common.GpuRequests, ss, nil)
 			}
 		case common.GpuLimit:
-			if node.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
+			if common.GetGpuExporterType(range5Min, cluster) == common.KubexGpu {
 				c.gpuLimit = int(value)
 				c.gpuLimitFloat = value
 				getKubexGpuSharingStrategy(ss, cluster, c)
@@ -260,7 +260,7 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			c.gpuMemCount++
 			c.gpuMemTotal += int(value)
 			// also get the GPU model name && sharing strategy
-			switch node.GetGpuExporterType(range5Min, cluster) {
+			switch common.GetGpuExporterType(range5Min, cluster) {
 			case common.Dcgm:
 				concatenateValue(ss, common.ModelName, &c.gpuModel, nil, nil)
 				np := &nodeProvider{cluster: cluster}
@@ -289,6 +289,38 @@ func (mh *metricHolder) getContainerMetric(cluster string, result model.Matrix) 
 			if lang, ok = common.GetLabelValue(ss, common.TelemetrySdkLanguage); ok {
 				c.runtimes.addRuntime(&Runtime{Name: lang})
 				addToLabelMap(model.Metric{runtimeLabel: model.LabelValue(lang)}, c.labelMap, nil)
+			}
+		case jvmRuntimeInfo:
+			version, _ := common.GetLabelValue(ss, versionLabel)
+			runtimeName, _ := common.GetLabelValue(ss, nameLabel)
+			description, _ := common.GetLabelValue(ss, descLabel)
+			vendor, _ := common.GetLabelValue(ss, vendorLabel)
+			prtd, _ := parseProcessRuntimeDetails(ss)
+			rt := &Runtime{
+				Name:    JvmRuntimeName,
+				Version: version,
+				RuntimeDetails: &JvmRuntimeDetails{
+					ProcessRuntimeDetails: *prtd,
+					Description:           description,
+					Name:                  runtimeName,
+					Vendor:                vendor,
+					heapInitMib:           common.UnknownValueFloat,
+					heapMaxMib:            common.UnknownValueFloat,
+				},
+			}
+			c.runtimes.updateRuntime(rt)
+			addToLabelMap(model.Metric{runtimeLabel: model.LabelValue(JvmRuntimeName)}, c.labelMap, nil)
+		case heapInit:
+			if rt, f := c.runtimes.getRuntime(JvmRuntimeName); f {
+				if jrtd, isJvm := jvmRuntimeDetails(rt); isJvm {
+					jrtd.heapInitMib = common.MiB(value)
+				}
+			}
+		case heapMax:
+			if rt, f := c.runtimes.getRuntime(JvmRuntimeName); f {
+				if jrtd, isJvm := jvmRuntimeDetails(rt); isJvm {
+					jrtd.heapMaxMib = common.MiB(value)
+				}
 			}
 		}
 	}

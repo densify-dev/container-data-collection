@@ -3,12 +3,9 @@ package node
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/densify-dev/container-data-collection/internal/common"
 	"github.com/densify-dev/container-data-collection/internal/kubernetes"
-	nnet "github.com/densify-dev/net-utils/network"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
@@ -47,9 +44,9 @@ type node struct {
 	k8sVersion                                     string
 	gpuVendor, gpuModel                            string
 	netSpeedBytes, memTotal, gpuTotal, gpuMemTotal int
-	cpuCapacity, memCapacity, gpuCapacity,
+	cpuCapacity, cpuCapacityMcores, memCapacity, gpuCapacity,
 	ephemeralStorageCapacity, podsCapacity, hugepages2MiCapacity int
-	cpuAllocatable, memAllocatable, gpuAllocatable,
+	cpuAllocatable, cpuAllocatableMcores, memAllocatable, gpuAllocatable,
 	ephemeralStorageAllocatable, podsAllocatable, hugepages2MiAllocatable int
 	cpuLimit, cpuRequest, memLimit, memRequest, gpuLimit, gpuRequest int
 	gpuReplicas                                                      int
@@ -93,7 +90,7 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, getNodeTaints)
 
 	mh := &metricHolder{}
-	if HasNodeExporter(range5Min) {
+	if common.HasNodeExporter(range5Min) {
 		for _, qw := range GetQueryWrappers(&queryWrappers, queryWrappersMap) {
 			mh.labelName = qw.MetricField[0]
 			mh.name = common.NetSpeedBytes
@@ -106,7 +103,7 @@ func Metrics() {
 	}
 
 	mh.labelName = common.Node
-	if HasDcgmExporter(range5Min) {
+	if common.HasDcgmExporter(range5Min) {
 		// The model name should be collect in any case and override what we got from the node labels
 		// (for consistency with the containers' model name)
 		mh.name = common.ModelName
@@ -222,7 +219,7 @@ func Metrics() {
 	query = qw.CountQuery.Wrap("kube_pod_info{} unless on (pod, namespace) (kube_pod_container_info{} - on (namespace,pod,container) group_left max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container)) == 0")
 	common.PodCount.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 
-	if HasEphemeralStorageExporter(range5Min) {
+	if common.HasEphemeralStorageExporter(range5Min) {
 		utilizationQuery := fmt.Sprintf(utilizationFmt, ephemeralStorageBaseQuery, qw.MetricField[0], utilizationBaseQueryEphemeralAllocatable)
 		wmhm := map[string]*common.WorkloadMetricHolder{ephemeralStorageBaseQuery: common.EphemeralStorageUsageBytes, utilizationQuery: common.EphemeralStorageUsageUtilization}
 		for baseQuery, wmh := range wmhm {
@@ -233,7 +230,7 @@ func Metrics() {
 		common.LogAll(1, common.Info, "entity=%s Ephemeral storage exporter metrics not present for any cluster", common.NodeEntityKind)
 	}
 
-	if HasDcgmExporter(range5Min) {
+	if common.HasDcgmExporter(range5Min) {
 		query = qw.AvgQuery.Wrap(common.SafeDcgmGpuUtilizationQuery)
 		common.GpuUtilizationAvg.GetWorkloadFieldsFunc(query, qw.MetricField, overrideNodeNameFieldsFunc, common.NodeEntityKind)
 		query += GpuPercentQuerySuffix
@@ -248,7 +245,7 @@ func Metrics() {
 		common.LogAll(1, common.Info, "entity=%s Nvidia DCGM exporter metrics not present for any cluster", common.NodeEntityKind)
 	}
 	// bail out if detected that Prometheus Node Exporter metrics are not present for any cluster
-	if !HasNodeExporter(range5Min) {
+	if !common.HasNodeExporter(range5Min) {
 		err = fmt.Errorf("prometheus node exporter metrics not present for any cluster")
 		common.LogError(err, "entity=%s", common.NodeEntityKind)
 		return
@@ -415,152 +412,7 @@ func createNode(cluster string, result model.Matrix) {
 	}
 }
 
-const (
-	nodeExporterPivotQuery = "max(node_cpu_seconds_total{}) by (node, instance)"
-	HasNodeLabel           = "node_label_node_name"     // "node" label is present and has the node name
-	HasInstanceLabelPodIp  = "instance_label_pod_ip"    // "node" label is absent, "instance" label has a format of IP address:port
-	HasInstanceLabelOther  = "instance_label_node_name" // "node" label is absent, "instance" label has a different format and assumed to be node name
-)
-
-var (
-	once            sync.Once
-	beylaPivotQuery = fmt.Sprintf("max(%s%s) by (%s)", common.SurveyInfo, common.Braces, common.SemconvNodeName)
-)
-
-func pivotQuery(query string) string {
-	return fmt.Sprintf("max(%s) by (%s)", query, common.Node)
-}
-
-func DetermineExporters(range5Min *v1.Range) {
-	once.Do(func() {
-		_, _ = common.CollectAndProcessMetric(nodeExporterPivotQuery, range5Min, determineNodeExporter)
-		_, _ = common.CollectAndProcessMetric(pivotQuery(common.DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}")), range5Min, determineDcgmExporter)
-		_, _ = common.CollectAndProcessMetric(pivotQuery(common.EphemeralExporterLabelReplace("ephemeral_storage_node_available{}")), range5Min, determineEphemeralStorageExporter)
-		_, _ = common.CollectAndProcessMetric(pivotQuery("kubex_gpu_container_requests{}"), range5Min, determineKubexGpuExporter)
-		_, _ = common.CollectAndProcessMetric(beylaPivotQuery, range5Min, determineBeylaExporter)
-	})
-}
-
-var nodeExporterIndicators = make(map[string][]string)
-
-func determineNodeExporter(cluster string, result model.Matrix) {
-	if l := result.Len(); l > 0 {
-		ss := result[l-1]
-		var indicator string
-		var f bool
-		if _, f = ss.Metric[common.Node]; f {
-			indicator = HasNodeLabel
-		} else {
-			var instance model.LabelValue
-			if instance, f = ss.Metric[common.Instance]; f {
-				if _, _, err := nnet.ParseAddress(string(instance)); err == nil {
-					indicator = HasInstanceLabelPodIp
-				} else {
-					indicator = HasInstanceLabelOther
-				}
-			}
-		}
-		if f {
-			nodeExporterIndicators[indicator] = append(nodeExporterIndicators[indicator], cluster)
-		}
-	}
-}
-
-var gpuExporters = make(map[string][]string)
-
-var dcgmExporterIndicators = make(map[string]bool)
-
-func determineDcgmExporter(cluster string, result model.Matrix) {
-	if l := result.Len(); l > 0 {
-		dcgmExporterIndicators[cluster] = true
-		gpuExporters[common.Dcgm] = append(gpuExporters[common.Dcgm], cluster)
-	}
-}
-
-var kubexGpuExporterIndicators = make(map[string]bool)
-
-func determineKubexGpuExporter(cluster string, result model.Matrix) {
-	if l := result.Len(); l > 0 {
-		kubexGpuExporterIndicators[cluster] = true
-		gpuExporters[common.KubexGpu] = append(gpuExporters[common.KubexGpu], cluster)
-	}
-}
-
-var ephemeralStorageExporterIndicators = make(map[string]bool)
-
-func determineEphemeralStorageExporter(cluster string, result model.Matrix) {
-	if l := result.Len(); l > 0 {
-		ephemeralStorageExporterIndicators[cluster] = true
-	}
-}
-
-var beylaExporterIndicators = make(map[string]bool)
-
-func determineBeylaExporter(cluster string, result model.Matrix) {
-	if l := result.Len(); l > 0 {
-		beylaExporterIndicators[cluster] = true
-	}
-}
-
-// HasNodeExporter returns true if node exporter metrics are present for any cluster
-func HasNodeExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(nodeExporterIndicators) > 0
-}
-
-// HasDcgmExporter returns true if DCGM exporter metrics are present for any cluster
-func HasDcgmExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(dcgmExporterIndicators) > 0
-}
-
-// HasKubexGpuExporter returns true if Kubex GPU exporter metrics are present for any cluster
-func HasKubexGpuExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(kubexGpuExporterIndicators) > 0
-}
-
-func GetGpuExporters(range5Min *v1.Range) map[string][]string {
-	DetermineExporters(range5Min)
-	return gpuExporters
-}
-
-var gpuExportersOrdered = []string{common.KubexGpu, common.Dcgm}
-
-func DetermineGpuExporter(range5Min *v1.Range) (s string) {
-	ges := GetGpuExporters(range5Min)
-	for _, ge := range gpuExportersOrdered {
-		if len(ges[ge]) > 0 {
-			s = ge
-			break
-		}
-	}
-	return
-}
-
-func GetGpuExporterType(range5Min *v1.Range, cluster string) (s string) {
-	DetermineExporters(range5Min)
-	if kubexGpuExporterIndicators[cluster] {
-		s = common.KubexGpu
-	} else if dcgmExporterIndicators[cluster] {
-		s = common.Dcgm
-	}
-	return
-}
-
-// HasEphemeralStorageExporter returns true if ephemeral storage exporter metrics are present for any cluster
-func HasEphemeralStorageExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(ephemeralStorageExporterIndicators) > 0
-}
-
-// HasBeylaExporter returns true if Beyla exporter metrics are present for any cluster
-func HasBeylaExporter(range5Min *v1.Range) bool {
-	DetermineExporters(range5Min)
-	return len(beylaExporterIndicators) > 0
-}
-
-var queryWrapperKeys = []string{HasNodeLabel, HasInstanceLabelPodIp, HasInstanceLabelOther}
+var queryWrapperKeys = []string{common.HasNodeLabel, common.HasInstanceLabelPodIp, common.HasInstanceLabelOther}
 
 type QueryWrapper struct {
 	Query, SumQuery, CountQuery, AvgQuery *common.WorkloadQueryWrapper
@@ -573,7 +425,7 @@ const (
 )
 
 var queryWrappersMap = map[string]*QueryWrapper{
-	HasInstanceLabelPodIp: {
+	common.HasInstanceLabelPodIp: {
 		Query: &common.WorkloadQueryWrapper{
 			Prefix: "max(max(label_replace(",
 			Suffix: byPodIpSuffixNode,
@@ -584,8 +436,8 @@ var queryWrappersMap = map[string]*QueryWrapper{
 		},
 		MetricField: []model.LabelName{common.Node},
 	},
-	HasNodeLabel:          simpleQueryWrapper(common.Node),
-	HasInstanceLabelOther: simpleQueryWrapper(common.Instance),
+	common.HasNodeLabel:          simpleQueryWrapper(common.Node),
+	common.HasInstanceLabelOther: simpleQueryWrapper(common.Instance),
 }
 
 func simpleQueryWrapper(labelName string) *QueryWrapper {
@@ -617,7 +469,7 @@ func GetQueryWrappers(qws *[]*QueryWrapper, qwm map[string]*QueryWrapper) []*Que
 	}
 	if *qws == nil {
 		for _, key := range queryWrapperKeys {
-			if _, f := nodeExporterIndicators[key]; f {
+			if _, f := common.NodeExporterIndicators[key]; f {
 				var qw *QueryWrapper
 				if qw, f = qwm[key]; f {
 					*qws = append(*qws, qw)
