@@ -129,12 +129,15 @@ var (
 	EphemeralStorageUsageUtilization   = NewWorkloadMetricHolder(Ephemeral, Storage, Usage, Utilization)
 )
 
-const (
-	FilterTerminatedContainersClause = ` unless on (namespace,pod,container) (max(kube_pod_status_phase{phase!="Running"}) by (namespace,pod) == 1 or max(kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) by (namespace,pod,container) == 1)`
-)
-
-func FilterTerminatedContainers(prefix, suffix string) string {
-	return prefix + FilterTerminatedContainersClause + suffix
+// FilterTerminatedContainers returns deduplicated, non-terminated containers in
+// Running pods. Pass an empty initContainers selector for legacy metrics that
+// do not include init containers. Resource selectors apply only to input metrics.
+func FilterTerminatedContainers(containers, initContainers string) string {
+	query := "(" + containers + " unless on (namespace, pod, uid, container) ((kube_pod_container_status_terminated{} or kube_pod_container_status_terminated_reason{}) == 1))"
+	if initContainers != Empty {
+		query += " or ((" + initContainers + ` and on (namespace, pod, uid, container) (kube_pod_init_container_info{restart_policy="Always"} == 1)) unless on (namespace, pod, uid, container) ((kube_pod_init_container_status_terminated{} or kube_pod_init_container_status_terminated_reason{}) == 1))`
+	}
+	return "max by (node, namespace, pod, uid, container, resource) ((" + query + `) and on (namespace, pod, uid) (kube_pod_status_phase{phase="Running"} == 1))`
 }
 
 func QueryForResource(query, resource string) string {
@@ -142,27 +145,25 @@ func QueryForResource(query, resource string) string {
 }
 
 func nodeRequestsQuery(resource, suffix string) string {
-	var prefix string
+	var query string
 	switch resource {
 	case Cpu, Memory, NvidiaGpuResource:
-		prefix = QueryForResource(`sum(sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))`+suffix, resource)
+		query = FilterTerminatedContainers(QueryForResource("kube_pod_container_resource_requests{}", resource), QueryForResource("kube_pod_init_container_resource_requests{}", resource))
 	default:
-		prefix = fmt.Sprintf("sum(sum(kube_pod_container_resource_requests_%s{}%s", resource, suffix)
+		query = FilterTerminatedContainers(fmt.Sprintf("kube_pod_container_resource_requests_%s{}", resource), Empty)
 	}
-	return FilterTerminatedContainers(prefix, ") by (node)%s)")
+	return "sum(sum(" + query + suffix + ") by (node)%s)"
 }
 
 func nodeReservationPercentQuery(resource string) string {
-	var prefix, suffix string
+	var allocatable string
 	switch resource {
 	case Cpu, Memory, NvidiaGpuResource:
-		prefix = QueryForResource(`100 * sum(sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))`, resource)
-		suffix = QueryForResource(") by (node)%s) / sum(sum(kube_node_status_allocatable{}) by (node)%s)", resource)
+		allocatable = QueryForResource("kube_node_status_allocatable{}", resource)
 	default:
-		prefix = fmt.Sprintf("100 * sum(sum(kube_pod_container_resource_requests_%s{}", resource)
-		suffix = ") by (node)%s) / sum(sum(kube_node_status_allocatable_" + resource + "{}) by (node)%s)"
+		allocatable = "kube_node_status_allocatable_" + resource + "{}"
 	}
-	return FilterTerminatedContainers(prefix, suffix)
+	return "100 * " + nodeRequestsQuery(resource, Empty) + " / sum(sum(" + allocatable + ") by (node)%s)"
 }
 
 func nodeConditionalQueries(resource, suffix string) []string {
