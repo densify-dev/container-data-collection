@@ -178,7 +178,7 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	}
 	cmh.metric = common.Requests
-	query = `sum(kube_pod_container_resource_requests or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))) by (resource)`
+	query = `sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))) by (resource)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	if common.Found(indicators, common.Requests, false) {
 		cmh.metric = common.CpuRequest

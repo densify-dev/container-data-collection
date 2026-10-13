@@ -50,10 +50,10 @@ func CollectMetric(callDepth int, query string, promRange *v1.Range) (crm Cluste
 				var e error
 				switch pac {
 				case ApiQuery:
-					value, _, e = pa.Query(ctx, q, promRange.End)
+					value, _, _, e = pa.Query(ctx, q, promRange.End)
 				case ApiQueryRange:
 					pr := adjustTimeRange(promRange, si)
-					value, _, e = pa.QueryRange(ctx, q, *pr)
+					value, _, _, e = pa.QueryRange(ctx, q, *pr)
 				case ApiQueryExemplars:
 					// no use for exemplars yet, just for completeness
 					_, e = pa.QueryExemplars(ctx, q, promRange.Start, promRange.End)
@@ -92,7 +92,7 @@ func CheckPrometheusUp() (n int) {
 	if pa, err = promApi(Empty); err == nil {
 		var value model.Value
 		tr := TimeRange()
-		if value, _, err = pa.QueryRange(ctx, "max(up)", *tr); err == nil {
+		if value, _, _, err = pa.QueryRange(ctx, "max(up)", *tr); err == nil {
 			if mat, ok := value.(model.Matrix); ok {
 				for _, ss := range mat {
 					for _, v := range ss.Values {
