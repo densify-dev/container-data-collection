@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -388,80 +387,13 @@ func LogAllMetrics() (err error) {
 	for _, exp := range exporters {
 		if exp.logAllMetrics || Params.Debug {
 			query = fmt.Sprintf(allMetricsQueryFmt, prometheusMetricName, exp.metricsPrefix, Always.String())
-			query = aggOverTimeQuery(query, Last, Interval, UnknownValue)
+			query = AggOverTimeQuerySubQueries(query, Last, Interval, UnknownValue)
 			query = LabelReplace(query, metricName, prometheusMetricName, HasValue)
 			query = fmt.Sprintf(allMetricsFmt, metricName, query)
 			_, err = CollectAndProcessMetric(query, et, exp.logAllClusterMetrics)
 		}
 	}
 	return
-}
-
-const (
-	cadvisor         = "cadvisor"
-	nodeExporter     = "node-exporter"
-	ksm              = "kube-state-metrics"
-	ossm             = "openshift-state-metrics"
-	Dcgm             = "dcgm-exporter"
-	ephemeralStorage = "k8s-ephemeral-storage-metrics"
-	KubexGpu         = "kubex-gpu-process-exporter"
-	Beyla            = "beyla"
-	CustomMetrics    = "custom-metrics" // may be metrics obtained by recording rules, so not a true exporter
-	JmxExporter      = "jmx-exporter"
-)
-
-type exporter struct {
-	name           string
-	metricsPrefix  string
-	repMetric      string
-	repLabels      []string
-	logAllMetrics  bool
-	ignoreJobLabel bool
-}
-
-type clusterExporter struct {
-	exporter
-	promJob              string
-	ActualScrapeInterval time.Duration
-	UpScrapeInterval     time.Duration
-}
-
-func (e *exporter) getPrefix() string {
-	return e.metricsPrefix + Underscore
-}
-
-func (e *exporter) logAllClusterMetrics(cluster string, result model.Matrix) {
-	s := make([]string, 0, result.Len())
-	for _, ss := range result {
-		if mn, f := GetLabelValue(ss, metricName); f {
-			s = append(s, mn)
-		}
-	}
-	sort.Strings(s)
-	var level LogLevel
-	if e.logAllMetrics {
-		level = Info
-	}
-	LogCluster(1, level, ClusterFormat+" exporter=%s detected metrics=%v", cluster, true, cluster, e.name, s)
-}
-
-func (e *exporter) scrapeIntervalFromRepQuery(cluster string, result model.Matrix) {
-	l := len(exporters)
-	if len(clusterExporters[cluster]) == 0 {
-		clusterExporters[cluster] = make(map[string]*clusterExporter, l)
-	}
-	if len(clusterExportersByJob[cluster]) == 0 {
-		clusterExportersByJob[cluster] = make(map[string][]*clusterExporter, l)
-	}
-	for _, ss := range result {
-		jobName := GetValue(ss, Job)
-		ce := &clusterExporter{exporter: *e, promJob: jobName}
-		setScrapeInterval(&ce.ActualScrapeInterval, ss, cluster, ce.name, "rep metric")
-		clusterExporters[cluster][e.metricsPrefix] = ce
-		if jobName != Empty {
-			clusterExportersByJob[cluster][jobName] = append(clusterExportersByJob[cluster][jobName], ce)
-		}
-	}
 }
 
 func scrapeIntervalFromUp(cluster string, result model.Matrix) {
@@ -508,30 +440,6 @@ func validateScrapeInterval(ss *model.SampleStream) (si time.Duration, err error
 	}
 	return
 }
-
-var exporters = makeExporters()
-
-func makeExporters() map[string]*exporter {
-	exps := make(map[string]*exporter, 10)
-	addExporter(exps, cadvisor, "container_cpu_usage_seconds_total", []string{Container}, false, false)
-	addExporter(exps, nodeExporter, "node_cpu_seconds_total", nil, false, false)
-	addExporter(exps, ksm, "kube_pod_info", nil, false, false)
-	addExporter(exps, ossm, "openshift_clusterresourcequota_usage", nil, false, false)
-	addExporter(exps, Dcgm, "DCGM_FI_DEV_GPU_UTIL", nil, true, false)
-	addExporter(exps, ephemeralStorage, "ephemeral_storage_node_available", nil, true, false)
-	addExporter(exps, KubexGpu, "kubex_gpu_container_requests", nil, true, false)
-	addExporter(exps, Beyla, SurveyInfo, nil, true, true)
-	addExporter(exps, CustomMetrics, "custom_container_memory_sizing_bytes", []string{Container}, true, true)
-	addExporter(exps, JmxExporter, "jvm_runtime_info", []string{Container}, false, false)
-	return exps
-}
-
-func addExporter(exps map[string]*exporter, name, repMetric string, repLabels []string, logAllMetrics bool, ignoreJobLabel bool) {
-	exps[name] = &exporter{name: name, metricsPrefix: getExporterPrefix(repMetric), repMetric: repMetric, repLabels: repLabels, logAllMetrics: logAllMetrics, ignoreJobLabel: ignoreJobLabel}
-}
-
-var clusterExporters = make(map[string]map[string]*clusterExporter)
-var clusterExportersByJob = make(map[string]map[string][]*clusterExporter)
 
 type intervalFunction string
 
@@ -802,10 +710,6 @@ func getScrapeInterval(cluster string, metricName string) (si time.Duration) {
 	return
 }
 
-func getExporterPrefix(metricName string) string {
-	return strings.Split(metricName, Underscore)[0]
-}
-
 type ClusterQueryExclusion func(cluster string, query string) bool
 
 func RegisterClusterQueryExclusion(name string, ce ClusterQueryExclusion) {
@@ -836,7 +740,7 @@ func ResolveMetrics(m ResolveMetricMap) (err error) {
 	et := TimeRangeEndTimeOnly()
 	for mName, f := range m {
 		mr := &metricResolver{metricName: mName, f: f}
-		query := aggOverTimeQuery(mName+Braces, Present, Interval, UnknownValue)
+		query := AggOverTimeQuerySubQueries(mName+Braces, Present, Interval, UnknownValue)
 		query = fmt.Sprintf(`max(%s)`, query)
 		if _, err = CollectAndProcessMetric(query, et, mr.resolve); err != nil {
 			break

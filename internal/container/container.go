@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/densify-dev/container-data-collection/internal/common"
-	"github.com/densify-dev/container-data-collection/internal/node"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
@@ -436,7 +435,7 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 			ephemeralStorageRequest: common.UnknownValue,
 			name:                    containerName,
 			labelMap:                make(map[string]string),
-			runtimes:                &Runtimes{runtimes: make([]*Runtime, 0), fingerprints: make(map[uint64]bool)},
+			runtimes:                initRuntimes(),
 		}
 	}
 }
@@ -504,7 +503,7 @@ func Metrics() {
 	containerWorkloadWriters.AddMetricWorkloadWriters(common.CurrentSize, common.CpuLimits, common.CpuRequests, common.MemoryLimits, common.MemoryRequests, common.GpuLimits, common.GpuRequests, common.EphemeralStorageRequests, common.EphemeralStorageLimits)
 
 	mh := &metricHolder{}
-	if node.HasBeylaExporter(range5Min) {
+	if common.HasBeylaExporter(range5Min) {
 		mh.metric = runtime
 		mh.isOTelMetric = true
 		query = fmt.Sprintf("max(%s%s) by (%s, %s, %s ,%s ,%s)", common.SurveyInfo, common.Braces, common.SemconvNamespaceName, common.SemconvKind, common.SemconvOwnerName, common.SemconvContainerName, common.TelemetrySdkLanguage)
@@ -512,11 +511,13 @@ func Metrics() {
 		mh.isOTelMetric = false
 	}
 
+	getJvmAttributes(mh)
+
 	mh.metric = common.Memory
 	query = `container_spec_memory_limit_bytes{name!~"k8s_POD_.*"}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 
-	if node.HasDcgmExporter(range5Min) {
+	if common.HasDcgmExporter(range5Min) {
 		mh.metric = common.GpuMemoryTotal
 		query = fmt.Sprintf("sum(%s) by (namespace, pod, container, %s, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.Node, common.ModelName)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
@@ -551,7 +552,7 @@ func Metrics() {
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
-	if node.HasKubexGpuExporter(range5Min) {
+	if common.HasKubexGpuExporter(range5Min) {
 		mh.metric = common.GpuMemoryTotal
 		query = fmt.Sprintf("(%s / %d)", makeKubexGpuQuery("kubex_gpu_container_memory_total_bytes", common.Sum, 0, common.Node, common.GpuModel), common.Mib)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
@@ -750,11 +751,12 @@ func Metrics() {
 	}
 	getCpuWorkloads(wq)
 	getMemoryWorkloads(wq)
+	getJvmWorkloads(wq)
 
 	wq.aggregators[common.Max] = common.Empty
 	wq.aggregators[common.Avg] = common.Empty
 
-	if node.HasEphemeralStorageExporter(range5Min) {
+	if common.HasEphemeralStorageExporter(range5Min) {
 		wq.metricName = common.CamelCase(common.Ephemeral, common.Storage, common.Usage, common.Bytes)
 		wq.aggregatorAsSuffix = true
 		rootfsUsage := common.LabelReplace(`ephemeral_storage_container_rootfs_used_bytes{name!~"k8s_POD_.*"}`, common.Container, common.ExportedContainer, common.HasValue)
@@ -880,10 +882,11 @@ func getMemoryWorkloads(wq *workloadQuery) {
 	getAvgMaxSeparateQueries(wq, memQueryMap())
 }
 
-func addToQueryMap(queryMap map[string][]*baseWorkloadQuery, mName, agg, metric, suffix string) {
+func addToQueryMap(queryMap map[string][]*baseWorkloadQuery, mName, agg, metric, suffix string, scrapeMultiplier int) {
+	baseQuery := common.AggOverTimeQuerySubQueries(metric, agg, common.Step, scrapeMultiplier)
 	queryMap[agg] = append(queryMap[agg], &baseWorkloadQuery{
 		metricName: mName,
-		baseQuery:  common.AggOverTimeQuery(metric, agg),
+		baseQuery:  baseQuery,
 		aggSuffix:  suffix,
 	})
 }
@@ -902,7 +905,7 @@ func memQueryMap() map[string][]*baseWorkloadQuery {
 	}
 	for _, agg := range aggregators {
 		for mName, metric := range metrics {
-			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg])
+			addToQueryMap(queryMap, mName, agg, metric, suffixes[agg], common.UnknownValue)
 		}
 	}
 	return queryMap
@@ -1017,7 +1020,7 @@ func toMib(q string) string {
 }
 
 func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) {
-	ge := node.DetermineGpuExporter(range5Min)
+	ge := common.DetermineGpuExporter(range5Min)
 	gqg := gqgs[ge]
 	if gqg == nil {
 		return
