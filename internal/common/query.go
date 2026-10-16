@@ -186,6 +186,16 @@ func DcgmExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, Hostname, Always)
 }
 
+// ExportedLabelsReplace maps the workload identity back onto the namespace, pod and container labels.
+// Where the scrape is configured to enforce the namespace label (e.g. OpenShift user workload monitoring),
+// Prometheus renames the exporter-provided namespace/pod/container labels to exported_namespace/exported_pod/exported_container
+// and fills namespace/pod/container with those of the exporter itself. Each label is replaced only if its exported_ counterpart
+// has a value, so this is a no-op on series which have no exported_ labels.
+// It must be applied to the raw metric, before any aggregation which drops the exported_ labels.
+func ExportedLabelsReplace(query string) string {
+	return LabelReplace(LabelReplace(LabelReplace(query, Namespace, ExportedNamespace, HasValue), Pod, ExportedPod, HasValue), Container, ExportedContainer, HasValue)
+}
+
 func EphemeralExporterLabelReplace(query string) string {
 	return LabelReplace(query, Node, NodeName, Always)
 }
@@ -209,6 +219,9 @@ type GpuQueryGenerator struct {
 	F                WrapperGenerator
 	UseSubquery      bool
 	DcgmLabelReplace bool
+	// ExportedLabelReplace applies ExportedLabelsReplace to the query result;
+	// only valid if the query is not aggregated and so retains the exported_ labels
+	ExportedLabelReplace bool
 }
 
 func (dqg *GpuQueryGenerator) GpuAggOverTimeQuery(q string, agg string) (qry string) {
@@ -219,6 +232,9 @@ func (dqg *GpuQueryGenerator) GpuAggOverTimeQuery(q string, agg string) (qry str
 		sm = UnknownValue
 	}
 	qry = generateOrOrigin(aggOverTimeQuery(q, agg, Step, sm), dqg.F)
+	if dqg.ExportedLabelReplace {
+		qry = ExportedLabelsReplace(qry)
+	}
 	if dqg.DcgmLabelReplace {
 		qry = DcgmExporterLabelReplace(qry)
 	}
@@ -235,6 +251,15 @@ func SafeUtilizationQuery(q string) string {
 var SafeDcgmGpuUtilizationQuery = SafeUtilizationQuery(DcgmExporterLabelReplace("DCGM_FI_DEV_GPU_UTIL{}"))
 
 func PercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
+	return percentQuerySuffix(metric, selector, nil, onWhat...)
+}
+
+// ExportedPercentQuerySuffix is PercentQuerySuffix for a metric which may carry exported_ labels
+func ExportedPercentQuerySuffix(metric string, selector []string, onWhat ...string) string {
+	return percentQuerySuffix(metric, selector, ExportedLabelsReplace, onWhat...)
+}
+
+func percentQuerySuffix(metric string, selector []string, adjust WrapperGenerator, onWhat ...string) string {
 	var suffixPrefix string
 	if metric != Empty {
 		what := JoinComma(onWhat...)
@@ -242,7 +267,7 @@ func PercentQuerySuffix(metric string, selector []string, onWhat ...string) stri
 		if len(selector) == 2 {
 			sel = fmt.Sprintf(`%s="%s"`, selector[0], selector[1])
 		}
-		suffixPrefix = fmt.Sprintf(` * on (%s) %s{%s}`, what, metric, sel)
+		suffixPrefix = fmt.Sprintf(` * on (%s) %s`, what, generateOrOrigin(fmt.Sprintf(`%s{%s}`, metric, sel), adjust))
 	}
 	return suffixPrefix + " / 100"
 }

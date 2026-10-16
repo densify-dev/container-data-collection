@@ -518,7 +518,7 @@ func Metrics() {
 
 	if node.HasDcgmExporter(range5Min) {
 		mh.metric = common.GpuMemoryTotal
-		query = fmt.Sprintf("sum(%s) by (namespace, pod, container, %s, %s)", common.DcgmExporterLabelReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}"), common.Node, common.ModelName)
+		query = fmt.Sprintf("sum(%s) by (namespace, pod, container, %s, %s)", common.DcgmExporterLabelReplace(common.ExportedLabelsReplace("DCGM_FI_DEV_FB_USED{} + DCGM_FI_DEV_FB_FREE{}")), common.Node, common.ModelName)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
@@ -558,10 +558,10 @@ func Metrics() {
 
 		// need to get limits & requests using specific queries
 		mh.metric = common.GpuRequest
-		query = fmt.Sprintf("max(kubex_gpu_container_requests{}%s) by (pod,namespace,container,gpu_allocation_type)", fstsq)
+		query = fmt.Sprintf("max(%s%s) by (pod,namespace,container,gpu_allocation_type)", common.ExportedLabelsReplace("kubex_gpu_container_requests{}"), fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 		mh.metric = common.GpuLimit
-		query = fmt.Sprintf("max(kubex_gpu_container_limits{}%s) by (pod,namespace,container,gpu_allocation_type)", fstsq)
+		query = fmt.Sprintf("max(%s%s) by (pod,namespace,container,gpu_allocation_type)", common.ExportedLabelsReplace("kubex_gpu_container_limits{}"), fstsq)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, mh.getContainerMetric)
 	}
 
@@ -946,7 +946,7 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 			metricName: common.CamelCase(common.Gpu, common.Utilization, common.Gpus),
 			baseQuery: map[string]string{
 				common.Dcgm:     common.DcgmPercentQuerySuffix("kube_pod_container_resource_requests", common.Namespace, common.Pod, common.Container),
-				common.KubexGpu: common.PercentQuerySuffix("kubex_gpu_container_requests", nil, common.Namespace, common.Pod, common.Container),
+				common.KubexGpu: common.ExportedPercentQuerySuffix("kubex_gpu_container_requests", nil, common.Namespace, common.Pod, common.Container),
 			},
 			appendToPrevious: true,
 			useSubquery: map[string]bool{
@@ -968,7 +968,7 @@ func makeGpuWorkloadQueries(sampleRate uint64) []*gpuWorkloadQuery {
 			metricName: common.CamelCase(common.Gpu, common.Mem, common.Used),
 			baseQuery: map[string]string{
 				common.Dcgm:     "DCGM_FI_DEV_FB_USED{}",
-				common.KubexGpu: "kubex_gpu_container_memory_bytes{}",
+				common.KubexGpu: common.ExportedLabelsReplace("kubex_gpu_container_memory_bytes{}"),
 			},
 			queryFunc: map[string]func(string) string{
 				common.KubexGpu: toMib,
@@ -992,6 +992,7 @@ func makeKubexGpuQuery(metric string, agg string, sampleRate uint64, extraLabels
 	if sampleRate > 0 {
 		fn = fmt.Sprintf("rate(%s[%dm])", fn, sampleRate)
 	}
+	fn = common.ExportedLabelsReplace(fn)
 	labels := []string{common.Namespace, common.Pod, common.Container}
 	labels = append(labels, extraLabels...)
 	byExc := strings.Join(labels, common.Comma)
@@ -1002,7 +1003,8 @@ func makeKubexGpuQuery(metric string, agg string, sampleRate uint64, extraLabels
 var aggregators = []string{common.Avg, common.Max}
 
 var dqg = &common.GpuQueryGenerator{
-	DcgmLabelReplace: true,
+	DcgmLabelReplace:     true,
+	ExportedLabelReplace: true,
 }
 
 var kqg = &common.GpuQueryGenerator{}
