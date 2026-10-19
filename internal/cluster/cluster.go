@@ -160,6 +160,21 @@ var queryWrappersMap = map[string]*node.QueryWrapper{
 
 var queryWrappers []*node.QueryWrapper
 
+func resourceQuery(qualifier, resource string, unified bool) string {
+	metric := "kube_pod_container_resource_" + qualifier
+	if unified {
+		return "sum(" + common.FilterTerminatedContainers(metric+common.Braces, "kube_pod_init_container_resource_"+qualifier+common.Braces) + ") by (resource)"
+	}
+	switch resource {
+	case common.Cpu:
+		return "sum(" + common.FilterTerminatedContainers(metric+"_cpu_cores{}", common.Empty) + ")*1000"
+	case common.Memory:
+		return "sum(" + common.FilterTerminatedContainers(metric+"_memory_bytes{}", common.Empty) + ")/1024/1024"
+	default:
+		return common.Empty
+	}
+}
+
 func Metrics() {
 	for _, clusterName := range common.ClusterNames {
 		createCluster(clusterName)
@@ -167,25 +182,25 @@ func Metrics() {
 	var query string
 	range5Min := common.TimeRange()
 	cmh := &clusterMetricHolder{metric: common.Limits}
-	query = `sum(kube_pod_container_resource_limits{} or (kube_pod_init_container_resource_limits{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))) by (resource)`
+	query = resourceQuery(common.Limits, common.Empty, true)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	if common.Found(indicators, common.Limits, false) {
 		cmh.metric = common.CpuLimit
-		query = `sum(kube_pod_container_resource_limits_cpu_cores{}*1000)`
+		query = resourceQuery(common.Limits, common.Cpu, false)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 		cmh.metric = common.MemLimit
-		query = `sum(kube_pod_container_resource_limits_memory_bytes{}/1024/1024)`
+		query = resourceQuery(common.Limits, common.Memory, false)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	}
 	cmh.metric = common.Requests
-	query = `sum(kube_pod_container_resource_requests{} or (kube_pod_init_container_resource_requests{} * on (namespace, pod, container, uid) group_left max by (namespace, pod, container, uid) (kube_pod_init_container_info{restart_policy="Always"}))) by (resource)`
+	query = resourceQuery(common.Requests, common.Empty, true)
 	_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	if common.Found(indicators, common.Requests, false) {
 		cmh.metric = common.CpuRequest
-		query = `sum(kube_pod_container_resource_requests_cpu_cores{}*1000)`
+		query = resourceQuery(common.Requests, common.Cpu, false)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 		cmh.metric = common.MemRequest
-		query = `sum(kube_pod_container_resource_requests_memory_bytes{}/1024/1024)`
+		query = resourceQuery(common.Requests, common.Memory, false)
 		_, _ = common.CollectAndProcessMetric(query, range5Min, cmh.getClusterMetric)
 	}
 	writeConfig()
