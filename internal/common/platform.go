@@ -65,7 +65,7 @@ const (
 
 var (
 	platformQueryAdjusters = map[ObservabilityPlatform]QueryAdjuster{GoogleManagedPrometheus: gmpQueryAdjuster}
-	metricPrefixes         = []string{exporters[ksm].getPrefix(), exporters[Dcgm].getPrefix()}
+	metricPrefixes         = []string{exporters[ksm].getPrefix()}
 	gmpRe                  = buildGmpRegex()
 )
 

@@ -38,11 +38,11 @@ func QuerySuffixFmt(cf clusterFeature, queryTarget string, closeBracket bool, ex
 	s = " * on (node) group_"
 	switch queryTarget {
 	case common.Metric:
-		s += "right "
+		s += "right () "
 	case common.ConfigSt:
 		s += "left (%v) "
 	}
-	s += cf.NodeAndGroupCoreQueryFmt()
+	s += "(" + cf.NodeAndGroupCoreQueryFmt() + ")"
 	s += ") by (%v"
 	for _ = range len(extraArgs) {
 		s += ", %s"

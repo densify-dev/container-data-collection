@@ -13,7 +13,7 @@ require (
 	github.com/prometheus/common v0.72.1
 	github.com/prometheus/sigv4 v0.5.0
 	github.com/samber/lo v1.53.0
-	golang.org/x/exp v0.0.0-20261011100332-faecfb24eb49
+	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e
 	gopkg.in/yaml.v3 v3.0.1
 )
 
