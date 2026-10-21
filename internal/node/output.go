@@ -2,9 +2,10 @@ package node
 
 import (
 	"fmt"
-	"github.com/densify-dev/container-data-collection/internal/common"
 	"os"
 	"strings"
+
+	"github.com/densify-dev/container-data-collection/internal/common"
 )
 
 func writeConfig() {
@@ -72,7 +73,7 @@ func writeAttrs(name string, cluster map[string]*node) {
 		}
 	}(attributeWrite)
 
-	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CapacityPods,CapacityCpu,CapacityMemory,CapacityGpu,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableMemory,AllocatableGpu,AllocatableEphemeralStorage,AllocatableHugePages,MemoryTotalBytes,GpuTotal,GpuMemoryTotal,GpuReplicas,ProviderId,K8sVersion,NodeLabels,GpuLabels,NodeTaints,GpuVendor,GpuModel,GpuSharingStrategy,GpuMpsCapable,GpuVgpuPresent,GpuMigCapable,GpuMigStrategy"); err != nil {
+	if _, err = fmt.Fprintln(attributeWrite, "ClusterName,NodeName,VirtualTechnology,VirtualDomain,VirtualDatacenter,VirtualCluster,OsArchitecture,NetworkSpeed,CpuLimit,CpuRequest,MemoryLimit,MemoryRequest,GpuLimit,GpuRequest,CapacityPods,CapacityCpu,CapacityCpuMcores,CapacityMemory,CapacityGpu,CapacityEphemeralStorage,CapacityHugePages,AllocatablePods,AllocatableCpu,AllocatableCpuMcores,AllocatableMemory,AllocatableGpu,AllocatableEphemeralStorage,AllocatableHugePages,MemoryTotalBytes,GpuTotal,GpuMemoryTotal,GpuReplicas,ProviderId,K8sVersion,NodeLabels,GpuLabels,NodeTaints,GpuVendor,GpuModel,GpuSharingStrategy,GpuMpsCapable,GpuVgpuPresent,GpuMigCapable,GpuMigStrategy"); err != nil {
 		common.LogError(err, common.DefaultLogFormat, name, common.NodeEntityKind)
 		return
 	}
@@ -84,8 +85,8 @@ func writeAttrs(name string, cluster map[string]*node) {
 			return
 		}
 		values := []int{n.netSpeedBytes, n.cpuLimit, n.cpuRequest, n.memLimit, n.memRequest, n.gpuLimit, n.gpuRequest,
-			n.podsCapacity, n.cpuCapacity, n.memCapacity, n.gpuCapacity, n.ephemeralStorageCapacity, n.hugepages2MiCapacity,
-			n.podsAllocatable, n.cpuAllocatable, n.memAllocatable, n.gpuAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
+			n.podsCapacity, n.cpuCapacity, n.cpuCapacityMcores, n.memCapacity, n.gpuCapacity, n.ephemeralStorageCapacity, n.hugepages2MiCapacity,
+			n.podsAllocatable, n.cpuAllocatable, n.cpuAllocatableMcores, n.memAllocatable, n.gpuAllocatable, n.ephemeralStorageAllocatable, n.hugepages2MiAllocatable,
 			n.memTotal, n.gpuTotal, n.gpuMemTotal, n.gpuReplicas}
 		for _, value := range values {
 			if err = common.PrintCSVNumberValue(attributeWrite, value, false); err != nil {

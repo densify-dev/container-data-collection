@@ -381,7 +381,7 @@ func Metrics() {
 		queryWrappersMap := QueryWrappersMap(cf)
 		qws := node.GetQueryWrappers(&queryWrappers, queryWrappersMap)
 
-		if node.HasNodeExporter(range5Min) {
+		if common.HasNodeExporter(range5Min) {
 			for _, qw := range qws {
 				query = fmt.Sprintf(`sum(irate(node_cpu_seconds_total{mode!="idle"}[%sm])) by (%s) / on (%s) group_left count(node_cpu_seconds_total{mode="idle"}) by (%s) *100`, common.Params.Collection.SampleRateSt, qw.MetricField[0], qw.MetricField[0], qw.MetricField[0])
 				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
@@ -433,13 +433,13 @@ func Metrics() {
 			common.LogAll(1, common.Error, "entity=%s prometheus node exporter metrics not present for any cluster", common.NodeGroupEntityKind)
 		}
 
-		if node.HasDcgmExporter(range5Min) {
+		if common.HasDcgmExporter(range5Min) {
 			gwmhs := map[string]*common.WorkloadMetricHolder{
 				common.Empty:               common.GpuUtilizationAvg,
 				node.GpuPercentQuerySuffix: common.GpuUtilizationGpusAvg,
 			}
 			// All DCGM queries are transformed using label_replace to have the node label
-			qw := queryWrappersMap[node.HasNodeLabel]
+			qw := queryWrappersMap[common.HasNodeLabel]
 			for q, wmh := range gwmhs {
 				query = fmt.Sprintf("avg(%s) by (%s)", common.SafeDcgmGpuUtilizationQuery+q, qw.MetricField[0])
 				query = qw.Query.GenerateWrapper(node.SumToAverage, nil).Wrap(query)
