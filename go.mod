@@ -1,6 +1,6 @@
 module github.com/densify-dev/container-data-collection
 
-go 1.27.2
+go 1.27.3
 
 // see https://pkg.go.dev/crypto/x509#ParseCertificate
 godebug x509negativeserial=1
