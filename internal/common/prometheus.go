@@ -383,9 +383,11 @@ const (
 
 func LogAllMetrics() (err error) {
 	et := TimeRangeEndTimeOnly()
+	visited := make(map[string]bool, len(exporters))
 	var query string
 	for _, exp := range exporters {
-		if exp.logAllMetrics || Params.Debug {
+		if (exp.logAllMetrics || Params.Debug) && !visited[exp.metricsPrefix] {
+			visited[exp.metricsPrefix] = true
 			query = fmt.Sprintf(allMetricsQueryFmt, prometheusMetricName, exp.metricsPrefix, Always.String())
 			query = AggOverTimeQuerySubQueries(query, Last, Interval, UnknownValue)
 			query = LabelReplace(query, metricName, prometheusMetricName, HasValue)
