@@ -19,33 +19,9 @@ const (
 	containerIdx
 )
 
-const (
-	labelReplacePrefix    = `label_replace(`
-	labelReplaceSuffixFmt = `, "%s", "$1", "%s", "(.*)")`
-)
-
-type labelHolder struct {
-	detected bool
-	names    []string
-	wqws     map[int]*common.WorkloadQueryWrapper
-}
-
-func labelPlaceholder(s string) string {
-	return common.CamelCase(s, common.Label)
-}
-
-var labelPlaceholders = []string{common.Empty, labelPlaceholder(common.Pod), labelPlaceholder(common.Container)}
-
-func (lh *labelHolder) values(ss *model.SampleStream) (string, string, string, bool) {
-	vals, ok := common.GetLabelsValues(ss, lh.names)
+func containerLabelValues(ss *model.SampleStream) (string, string, string, bool) {
+	vals, ok := common.GetLabelsValues(ss, []string{common.Namespace, common.Pod, common.Container})
 	return vals[common.Namespace], vals[common.Pod], vals[common.Container], ok
-}
-
-func (lh *labelHolder) setWrapper(lh1, lh2 *labelHolder, l int) {
-	lh.wqws[l] = &common.WorkloadQueryWrapper{
-		Prefix: labelReplacePrefix,
-		Suffix: fmt.Sprintf(labelReplaceSuffixFmt, lh1.names[l], lh2.names[l]),
-	}
 }
 
 type labelNamesType int
@@ -61,8 +37,8 @@ const (
 	typeOwnerLabelNames
 )
 
-func (lh *labelHolder) getQueryProcessor(qpb *queryProcessorBuilder) (qp *common.QueryProcessor) {
-	if lh == nil || qpb == nil {
+func (qpb *queryProcessorBuilder) getQueryProcessor() (qp *common.QueryProcessor) {
+	if qpb == nil {
 		return
 	}
 	var nms []model.LabelName
@@ -76,7 +52,7 @@ func (lh *labelHolder) getQueryProcessor(qpb *queryProcessorBuilder) (qp *common
 	default:
 		return
 	}
-	names := append(nms, model.LabelName(lh.names[containerIdx]))
+	names := append(nms, model.LabelName(common.Container))
 	var ff common.FieldsFunc
 	if qpb.th != nil {
 		ff = qpb.th.containerFields
@@ -88,25 +64,9 @@ func (lh *labelHolder) getQueryProcessor(qpb *queryProcessorBuilder) (qp *common
 	return
 }
 
-var stdLabelHolder = &labelHolder{names: []string{common.Namespace, common.Pod, common.Container}}
 var stdPodLabels = []model.LabelName{common.Namespace, common.Pod}
 var typeOwnerLabels = []model.LabelName{common.Namespace, model.LabelName(ownerName)}
 var fullOwnerLabels = append(typeOwnerLabels, model.LabelName(ownerKind))
-
-var nameLabelHolder = &labelHolder{
-	names: []string{common.Namespace, common.SnakeCase(common.Pod, common.Name), common.SnakeCase(common.Container, common.Name)},
-	wqws:  make(map[int]*common.WorkloadQueryWrapper),
-}
-var labelHolders = makeLabelHolders()
-
-func makeLabelHolders() []*labelHolder {
-	// set wrappers for nameLabelHolder
-	nameLabelHolder.setWrapper(stdLabelHolder, nameLabelHolder, podIdx)
-	nameLabelHolder.setWrapper(nameLabelHolder, stdLabelHolder, containerIdx)
-	return []*labelHolder{stdLabelHolder, nameLabelHolder}
-}
-
-var clusterLabelHolders = make(map[string]*labelHolder)
 
 type metricHolder struct {
 	metric       string
@@ -138,18 +98,7 @@ func getOwner(cluster, nsName string, ns *namespace, objId *objectId) (obj *k8sO
 }
 
 func getContainer(cluster string, ss *model.SampleStream) (c *container, cwp *containerWorkloadProducer, ok bool) {
-	var nsName, podName, containerName string
-	if clh, f := clusterLabelHolders[cluster]; f {
-		nsName, podName, containerName, ok = clh.values(ss)
-	} else {
-		for _, lh := range labelHolders {
-			if nsName, podName, containerName, ok = lh.values(ss); ok {
-				lh.detected = true
-				clusterLabelHolders[cluster] = lh
-				break
-			}
-		}
-	}
+	nsName, podName, containerName, ok := containerLabelValues(ss)
 	if ok {
 		var ns *namespace
 		if ns, ok = namespaces[cluster][nsName]; ok {
@@ -735,7 +684,6 @@ type baseWorkloadQuery struct {
 }
 type workloadQuery struct {
 	baseWorkloadQuery
-	wqwIdx             int
 	hasSuffix          bool
 	aggregatorAsSuffix bool
 	aggregators        map[string]string
@@ -784,38 +732,17 @@ func getWorkload(wq *workloadQuery) {
 			agg = aggregator
 		}
 		wmh := newAggregatorWorkloadMetricHolder(agg, wq.aggregatorAsSuffix, wq.hasSuffix, wq.metricName)
-		for _, lh := range labelHolders {
-			queries := make(map[string]*common.QueryProcessor, len(wq.groupClauses))
-			if lh.detected {
-				q := wq.baseQuery + aggSuffix
-				if wqw := lh.wqws[wq.wqwIdx]; wqw != nil {
-					q = wqw.Wrap(q)
-				}
-				for groupClause, qpb := range wq.groupClauses {
-					query := fmt.Sprintf("%s(%s%s", aggregator, q, groupClause)
-					for i, ph := range labelPlaceholders {
-						if i > 0 {
-							query = strings.ReplaceAll(query, ph, lh.names[i])
-						}
-					}
-					queries[query] = lh.getQueryProcessor(qpb)
-				}
-				wmh.GetWorkloadQueryVariants(1, queries, common.ContainerEntityKind)
-			}
+		queries := make(map[string]*common.QueryProcessor, len(wq.groupClauses))
+		for groupClause, qpb := range wq.groupClauses {
+			query := fmt.Sprintf("%s(%s%s%s", aggregator, wq.baseQuery, aggSuffix, groupClause)
+			queries[query] = qpb.getQueryProcessor()
 		}
+		wmh.GetWorkloadQueryVariants(1, queries, common.ContainerEntityKind)
 	}
 }
 
-func hpaStatusConditionLabelFilter(lh *labelHolder) string {
-	var st, cond interface{}
-	if lh.names[podIdx] == common.Pod {
-		st = true
-		cond = scalingLimited
-	} else {
-		st = scalingLimited
-		cond = true
-	}
-	return fmt.Sprintf(`{%s="%v", %s="%v"}`, status, st, condition, cond)
+func hpaStatusConditionLabelFilter() string {
+	return fmt.Sprintf(`{%s="%v", %s="%v"}`, status, true, condition, scalingLimited)
 }
 
 func hpaTargetMetricLabelFilter(metricName, metricTargetType string) string {

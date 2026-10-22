@@ -112,15 +112,15 @@ func Events() {
 	common.RegisterClusterQueryExclusion(noHiddenOomKills, excludeHiddenOomKills)
 	common.RegisterClusterQueryExclusion(noLastTerminated, excludeKsmLastTerminated)
 	multipliers := map[bool]string{true: common.Asterisk + ksmLastTerminatedTimestamp + common.Braces, false: common.Empty}
-	eventQueries := make(map[string]int, 3)
+	eventQueries := make([]string, 0, 3)
 	for _, f := range common.FoundIndicatorCounter(indicators, ksmLastTerminatedTimestamp) {
-		eventQueries[makeRestartEventQuery(multipliers[f]).String()] = containerIdx
+		eventQueries = append(eventQueries, makeRestartEventQuery(multipliers[f]).String())
 	}
 	// cadvisor OOM kills are quickly deregistered when the kill causes container restart - see https://github.com/google/cadvisor/issues/3015 ;
 	// thus they only apply to "hidden OOM kills", which have been removed in k8s 1.28 with cgroup grouping (assuming cgroups v2) -
 	// https://github.com/kubernetes/kubernetes/pull/117793
 	oomkeqb := &eventQueryBuilder{baseMetric: cadvisorOomKillsMetric + common.Braces, fraction: fmt.Sprintf(`%.4f`, hiddenOomKillFraction)}
-	eventQueries[oomkeqb.String()] = podIdx
+	eventQueries = append(eventQueries, oomkeqb.String())
 	groupClauses := buildGroupClauses(common.Event)
 	getEvents(eventQueries, groupClauses)
 }
@@ -156,26 +156,13 @@ const (
 	eventMetricName = "ExitCode,IsPid1"
 )
 
-func getEvents(eventQueries map[string]int, groupClauses map[string]*queryProcessorBuilder) {
-	for _, lh := range labelHolders {
-		queries := make(map[string]*common.QueryProcessor, len(eventQueries)*len(groupClauses))
-		if lh.detected {
-			for baseQuery, wqwIdx := range eventQueries {
-				q := baseQuery
-				if wqw := lh.wqws[wqwIdx]; wqw != nil {
-					q = wqw.Wrap(q)
-				}
-				for groupClause, qpb := range groupClauses {
-					query := fmt.Sprintf("%s%s", q, groupClause)
-					for i, ph := range labelPlaceholders {
-						if i > 0 {
-							query = strings.ReplaceAll(query, ph, lh.names[i])
-						}
-					}
-					queries[query] = lh.getQueryProcessor(qpb)
-				}
-			}
-			common.GetWorkloadQueryVariantsFieldConversion(1, common.Events, eventMetricName, queries, common.ContainerEntityKind, common.Event, &ProcessExitEventProvider{})
+func getEvents(eventQueries []string, groupClauses map[string]*queryProcessorBuilder) {
+	queries := make(map[string]*common.QueryProcessor, len(eventQueries)*len(groupClauses))
+	for _, baseQuery := range eventQueries {
+		for groupClause, qpb := range groupClauses {
+			query := baseQuery + groupClause
+			queries[query] = qpb.getQueryProcessor()
 		}
 	}
+	common.GetWorkloadQueryVariantsFieldConversion(1, common.Events, eventMetricName, queries, common.ContainerEntityKind, common.Event, &ProcessExitEventProvider{})
 }
