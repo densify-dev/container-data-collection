@@ -363,7 +363,7 @@ func addContainerAndOwners(cluster string, result model.Matrix) {
 		namespaces[cluster] = cl
 	}
 	for _, ss := range result {
-		nsName, podName, containerName, ok := stdLabelHolder.values(ss)
+		nsName, podName, containerName, ok := containerLabelValues(ss)
 		if !ok {
 			continue
 		}
@@ -744,7 +744,6 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.JoinSpace(common.Container, common.Workload))
 	groupClauses := buildGroupClauses(common.Metric)
 	wq := &workloadQuery{
-		wqwIdx:       podIdx,
 		hasSuffix:    true,
 		aggregators:  map[string]string{common.Max: common.Empty, common.Avg: common.Empty},
 		groupClauses: groupClauses,
@@ -766,7 +765,7 @@ func Metrics() {
 		terminatedFilter := ` * on(pod, namespace) group_left() (max by(pod, namespace) (kube_pod_status_phase{phase="Running"}) == 1)`
 		queryTemplate := fmt.Sprintf(`(%[1]s + %[2]s) + on (pod_name, pod_namespace, container) group_left() (sum by (pod_name, pod_namespace, container) (%[3]s * on (pod_name, pod_namespace, volume_name) group_left() (%[4]s == 1)) or sum by (pod_name, pod_namespace, container) (%[2]s * 0)) + on (pod_name, pod_namespace, container) group_left() (sum by (pod_name, pod_namespace, container) (bottomk (1, %[3]s) by (pod_name, pod_namespace, volume_name)  and on (pod_name, pod_namespace, volume_name) (%[4]s > 1)) or sum by (pod_name, pod_namespace, container) (%[2]s * 0))`, rootfsUsage, logUsage, volumeUsage, volumeCount)
 		query = common.LabelReplace(common.LabelReplace(queryTemplate, common.Pod, common.PodName, common.Always), common.Namespace, common.PodNamespace, common.Always)
-		wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,%s,namespace,%s)`, query, labelPlaceholders[podIdx], labelPlaceholders[containerIdx]) + terminatedFilter
+		wq.baseQuery = fmt.Sprintf(`max(%s) by (instance,pod,namespace,container)`, query) + terminatedFilter
 		getWorkload(wq)
 	}
 
@@ -775,29 +774,28 @@ func Metrics() {
 	// it is supported by docker and cri-o container runtimes
 	wq.metricName = common.Disk
 	wq.aggregatorAsSuffix = false
-	wq.baseQuery = fmt.Sprintf(`max(container_fs_usage_bytes{name!~"k8s_POD_.*"}) by (instance,%s,namespace,%s)`, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = `max(container_fs_usage_bytes{name!~"k8s_POD_.*"}) by (instance,pod,namespace,container)`
 	getWorkload(wq)
 
 	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Percent)
-	wq.baseQuery = fmt.Sprintf(`(sum by (instance, %s, namespace, %s) (increase(container_cpu_cfs_throttled_periods_total{name!~"k8s_POD_.*"}[%dm])) / sum by (instance, %s, namespace, %s) (increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm]) > 0)) * 100`,
-		labelPlaceholders[podIdx], labelPlaceholders[containerIdx], common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx], common.Params.Collection.SampleRate)
+	wq.baseQuery = fmt.Sprintf(`(sum by (instance, pod, namespace, container) (increase(container_cpu_cfs_throttled_periods_total{name!~"k8s_POD_.*"}[%dm])) / sum by (instance, pod, namespace, container) (increase(container_cpu_cfs_periods_total{name!~"k8s_POD_.*"}[%dm]) > 0)) * 100`,
+		common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	getWorkload(wq)
 
 	wq.metricName = common.CamelCase(common.Cpu, common.Throttling, common.Seconds)
 	wq.aggregators = map[string]string{common.Sum: common.Empty}
-	wq.baseQuery = fmt.Sprintf(`sum(increase(container_cpu_cfs_throttled_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,%s,namespace,%s)`,
-		common.Params.Collection.SampleRate, labelPlaceholders[podIdx], labelPlaceholders[containerIdx])
+	wq.baseQuery = fmt.Sprintf(`sum(increase(container_cpu_cfs_throttled_seconds_total{name!~"k8s_POD_.*"}[%dm])) by (instance,pod,namespace,container)`,
+		common.Params.Collection.SampleRate)
 	getWorkload(wq)
 
 	getGpuWorkloads(range5Min, wq, common.Params.Collection.SampleRate)
 
 	wq.metricName = restarts
-	wq.wqwIdx = containerIdx
 	wq.hasSuffix = false
 	wq.aggregators = map[string]string{common.Sum: common.Empty}
 	wq.aggregatorNames = map[string]string{common.Sum: common.Max}
-	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,%s) or (max((round(increase(kube_pod_init_container_status_restarts_total{}[%dm]),1))) by (instance,pod,namespace,container) and (%s == 1))`,
-		common.Params.Collection.SampleRate, fstsq, labelPlaceholders[containerIdx], common.Params.Collection.SampleRate, initContainersQuery(common.Instance))
+	wq.baseQuery = fmt.Sprintf(`max((round(increase(kube_pod_container_status_restarts_total{}[%dm]),1))%s) by (instance,pod,namespace,container) or (max((round(increase(kube_pod_init_container_status_restarts_total{}[%dm]),1))) by (instance,pod,namespace,container) and (%s == 1))`,
+		common.Params.Collection.SampleRate, fstsq, common.Params.Collection.SampleRate, initContainersQuery(common.Instance))
 	getWorkload(wq)
 
 	spmxr := &hpaWorkloadQuery{
@@ -829,12 +827,8 @@ func Metrics() {
 			querySubject:       []string{condition},
 			metricNameSuffixes: []string{scaling, limited},
 		}
-		for _, lh := range labelHolders {
-			if lh.detected {
-				labelFilter = hpaStatusConditionLabelFilter(lh)
-				hwq.getWorkload(hmh, labelFilter)
-			}
-		}
+		labelFilter = hpaStatusConditionLabelFilter()
+		hwq.getWorkload(hmh, labelFilter)
 		for ctx, c := range targetMetricContexts {
 			for _, metricName := range targetMetricNames {
 				for t, labelType := range targetMetricTypes {
@@ -1052,7 +1046,7 @@ func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) 
 }
 
 const (
-	unownedGroupClause       = ` * on (namespace,pod) group_left max(%s) by (namespace,pod,%s)`
+	unownedGroupClause       = ` * on (namespace,pod) group_left max(%s) by (namespace,pod,container)`
 	directlyOwnedGroupClause = ` * on (namespace,pod) group_left (owner_kind,owner_name) max(kube_pod_owner{}) by (namespace,owner_kind,owner_name,pod)`
 	replicaSetGroupClause    = ` * on (namespace,pod) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace,replicaset,pod) * on (namespace,replicaset) group_left (owner_kind,owner_name) max(kube_replicaset_owner{}) by (namespace,owner_kind,owner_name,replicaset)`
 	jobGroupClause           = ` * on (namespace,pod) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace,job,pod) * on (namespace,job) group_left (owner_kind,owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace,owner_kind,owner_name,job)`
@@ -1081,14 +1075,10 @@ func buildGroupClause(qpbs map[string]*queryProcessorBuilder, owned bool, clause
 	ensureGroupClauseBuilders()
 	gcb := groupClauseBuilders[owned]
 	clf := clauseFormat
-	var args []any
 	if useSuffix {
 		clf += gcb.suffix
-		args = append(gcb.args, labelPlaceholders[containerIdx])
-	} else {
-		args = gcb.args
 	}
-	cl := fmt.Sprintf(clf, args...)
+	cl := fmt.Sprintf(clf, gcb.args...)
 	var lnt labelNamesType
 	var th *typeHolder
 	if owned {
@@ -1108,8 +1098,8 @@ var gcbOnce sync.Once
 func ensureGroupClauseBuilders() {
 	gcbOnce.Do(func() {
 		groupClauseBuilders = map[bool]*groupClauseBuilder{
-			true:  {suffix: `) by (namespace,owner_kind,owner_name,%s)`},
-			false: {suffix: `) by (namespace,pod,%s)`, args: []any{getOwnerQuery("kube_pod_owner", false), labelPlaceholders[containerIdx]}},
+			true:  {suffix: `) by (namespace,owner_kind,owner_name,container)`},
+			false: {suffix: `) by (namespace,pod,container)`, args: []any{getOwnerQuery("kube_pod_owner", false)}},
 		}
 	})
 }
