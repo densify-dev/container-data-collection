@@ -169,72 +169,7 @@ jobs:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
           APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
           TAG: ${{ steps.extract_tag.outputs.tag }}
+          MAJOR_VERSION: ${{ steps.extract_tag.outputs.major_version }}
           CHARTS_REPO: densify-dev/helm-charts
           CHART_DIR: charts/container-optimization-data-forwarder
-        run: |
-          set -euo pipefail
-          branch="update/container-optimization-data-forwarder-${TAG}"
-          work_dir="${RUNNER_TEMP}/helm-charts"
-
-          # Create the branch on helm-charts from master (reset it to master if
-          # a previous run of this tag already created it).
-          master_sha=$(gh api "repos/${CHARTS_REPO}/git/ref/heads/master" --jq .object.sha)
-          if gh api "repos/${CHARTS_REPO}/git/ref/heads/${branch}" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/${CHARTS_REPO}/git/refs/heads/${branch}" -f sha="${master_sha}" -F force=true > /dev/null
-          else
-            gh api "repos/${CHARTS_REPO}/git/refs" -f ref="refs/heads/${branch}" -f sha="${master_sha}" > /dev/null
-          fi
-
-          # Check the branch out outside this repo's workspace
-          git clone --quiet --depth 1 --branch "${branch}" \
-            "https://x-access-token:${GH_TOKEN}@github.com/${CHARTS_REPO}.git" "${work_dir}"
-          cd "${work_dir}/${CHART_DIR}"
-
-          # Patch-bump the chart version
-          current_version=$(sed -n -E 's/^version: *//p' Chart.yaml)
-          if [[ ! "${current_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "::error::unexpected chart version format: ${current_version}"
-            exit 1
-          fi
-          next_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
-          sed -i -E "s/^version: .*/version: ${next_version}/" Chart.yaml
-
-          # images.dataCollection.specificTag in values.yaml
-          sed -i -E "/^  dataCollection:/,/^  [^ ]/ s/^(    specificTag: ).*/\1\"${TAG}\"/" values.yaml
-          # Default value of the images.dataCollection.specificTag row in README.md
-          sed -i -E "/^\| \`images\.dataCollection\.specificTag\`/ s/\`[^\`]*\` \|\$/\`${TAG}\` |/" README.md
-
-          grep -q "^version: ${next_version}\$" Chart.yaml
-          grep -q "^    specificTag: \"${TAG}\"\$" values.yaml
-          grep -q "^| \`images\.dataCollection\.specificTag\`.*| \`${TAG}\` |\$" README.md
-          changed=$(git diff --name-only | sort | tr '\n' ' ')
-          expected="${CHART_DIR}/Chart.yaml ${CHART_DIR}/README.md ${CHART_DIR}/values.yaml "
-          if [[ "${changed}" != "${expected}" ]]; then
-            echo "::error::unexpected file set changed: ${changed}"
-            exit 1
-          fi
-
-          bot_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
-          git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${bot_id}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git commit --quiet -am "Update container-optimization-data-forwarder image to ${TAG}"
-          git push --quiet origin "HEAD:${branch}"
-
-          title="Update container-optimization-data-forwarder image to ${TAG}"
-          body=$(cat <<BODY
-          This PR was created automatically by the ${GITHUB_REPOSITORY} release workflow after image ${TAG} was built, pushed and passed the Trivy and Docker Scout scans.
-
-          Changes:
-          - Set \`images.dataCollection.specificTag\` to \`${TAG}\` in values.yaml and README.md
-          - Bumped container-optimization-data-forwarder chart to ${next_version}
-
-          Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          BODY
-          )
-          existing=$(gh pr list --repo "${CHARTS_REPO}" --head "${branch}" --state open --json number --jq '.[0].number // empty')
-          if [[ -n "${existing}" ]]; then
-            gh pr edit "${existing}" --repo "${CHARTS_REPO}" --title "${title}" --body "${body}"
-            echo "updated PR #${existing}"
-          else
-            gh pr create --repo "${CHARTS_REPO}" --base master --head "${branch}" --title "${title}" --body "${body}"
-          fi
+        run: ./.github/scripts/update-helm-chart-tag.sh
