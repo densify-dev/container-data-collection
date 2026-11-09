@@ -5,3 +5,4 @@ docs/*metrics*.txt
 docs/*metrics*.yaml
 artifacts
 preflight.log
+prompt

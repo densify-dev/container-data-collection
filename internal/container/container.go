@@ -294,6 +294,7 @@ func excludeNodeLabel(key, _ string) bool {
 var (
 	pth            = &typeHolder{typeName: common.Pod}
 	dth            = &typeHolder{typeName: common.Deployment}
+	dcth           = &typeHolder{typeName: common.DeploymentConfig}
 	rsth           = &typeHolder{typeName: common.ReplicaSet}
 	rcth           = &typeHolder{typeName: common.ReplicationController}
 	dsth           = &typeHolder{typeName: common.DaemonSet}
@@ -329,8 +330,14 @@ func (th *typeHolder) getOwners(cluster string, result model.Matrix) {
 	for _, ss := range result {
 		// don't pass cluster name as the cluster is not populated yet and we don't need the namespace
 		if nsName, _, values, ok := getNamespaceAndValues(ownerLabelNames, common.Empty, ss); ok {
+			if values[ownerKind] == common.Empty || values[ownerName] == common.Empty || values[ownerName] == "<none>" {
+				continue
+			}
 			owShip := newOwnership(values[ownerKind], values[ownerName])
 			ownedId := th.getObjectId(ss)
+			if ownedId == nil {
+				continue
+			}
 			ownedKey := ownedId.Key(nsName)
 			co[ownedKey] = owShip
 			if isRelevant(cluster, nsName, ownedId) {
@@ -480,6 +487,7 @@ func Metrics() {
 	var n int
 
 	range5Min = common.TimeRange()
+	resetReplicationControllerOwners()
 
 	common.DebugLogMemStats(1, "container data collection")
 	// queries to gather hierarchy information for containers
@@ -492,6 +500,9 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, rsth.getOwners)
 	query = fmt.Sprintf(`sum(%s) by (namespace, job_name, owner_name, owner_kind)`, getOwnerQuery("kube_job_owner", true))
 	_, _ = common.CollectAndProcessMetric(query, range5Min, jth.getOwners)
+	query = fmt.Sprintf(`max(%s) by (namespace, replicationcontroller, owner_name, owner_kind)`, replicationControllerOwnerSelector)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, rcth.getOwners)
+	common.RegisterClusterQueryExclusion(noReplicationControllerOwners, excludeReplicationControllerQueries)
 	query = fmt.Sprintf(`max(kube_pod_container_info{}) by (%s, %s, %s) or %s`, common.Container, common.Pod, common.Namespace, initContainersQuery(restartPolicyLabel))
 	if n, err = common.CollectAndProcessMetric(query, range5Min, addContainerAndOwners); err != nil || n == 0 {
 		// error already handled
@@ -618,6 +629,24 @@ func Metrics() {
 	query = `kube_deployment_created{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 
+	// deploymentconfig metrics
+	common.DebugLogObjectMemStats(common.DeploymentConfig)
+	query = `openshift_deploymentconfig_labels{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, dcth.getObjectMetricString)
+	omh.typeHolder = dcth
+	mh.metric = maxSurge
+	query = `openshift_deploymentconfig_spec_strategy_rollingupdate_max_surge{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	mh.metric = maxUnavailable
+	query = `openshift_deploymentconfig_spec_strategy_rollingupdate_max_unavailable{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	mh.metric = metadataGeneration
+	query = `openshift_deploymentconfig_metadata_generation{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	mh.metric = createTime
+	query = `openshift_deploymentconfig_created{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+
 	// replicaset metrics
 	common.DebugLogObjectMemStats(common.ReplicaSet)
 	query = `kube_replicaset_labels{}`
@@ -628,6 +657,7 @@ func Metrics() {
 
 	// replicationcontroller metrics
 	common.DebugLogObjectMemStats(common.ReplicationController)
+	omh.typeHolder = rcth
 	query = `kube_replicationcontroller_created{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 
@@ -720,6 +750,9 @@ func Metrics() {
 	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
 	omh.typeHolder = rcth
 	query = `kube_replicationcontroller_spec_replicas{}`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	omh.typeHolder = dcth
+	query = `max(openshift_deploymentconfig_spec_replicas{}) by (namespace, deploymentconfig)`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
 	omh.typeHolder = dsth
 	query = `kube_daemonset_status_number_available{}`
@@ -1046,15 +1079,16 @@ func getGpuWorkloads(range5Min *v1.Range, wq *workloadQuery, sampleRate uint64) 
 }
 
 const (
-	unownedGroupClause       = ` * on (namespace,pod) group_left max(%s) by (namespace,pod,container)`
-	directlyOwnedGroupClause = ` * on (namespace,pod) group_left (owner_kind,owner_name) max(kube_pod_owner{}) by (namespace,owner_kind,owner_name,pod)`
-	replicaSetGroupClause    = ` * on (namespace,pod) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace,replicaset,pod) * on (namespace,replicaset) group_left (owner_kind,owner_name) max(kube_replicaset_owner{}) by (namespace,owner_kind,owner_name,replicaset)`
-	jobGroupClause           = ` * on (namespace,pod) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace,job,pod) * on (namespace,job) group_left (owner_kind,owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace,owner_kind,owner_name,job)`
+	unownedGroupClause               = ` * on (namespace,pod) group_left max(%s) by (namespace,pod,container)`
+	directlyOwnedGroupClause         = ` * on (namespace,pod) group_left (owner_kind,owner_name) max(kube_pod_owner{}) by (namespace,owner_kind,owner_name,pod)`
+	replicaSetGroupClause            = ` * on (namespace,pod) group_left (replicaset) max(label_replace(kube_pod_owner{owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")) by (namespace,replicaset,pod) * on (namespace,replicaset) group_left (owner_kind,owner_name) max(kube_replicaset_owner{}) by (namespace,owner_kind,owner_name,replicaset)`
+	jobGroupClause                   = ` * on (namespace,pod) group_left (job) max(label_replace(kube_pod_owner{owner_kind="Job"}, "job", "$1", "owner_name", "(.*)")) by (namespace,job,pod) * on (namespace,job) group_left (owner_kind,owner_name) max(label_replace(kube_job_owner{}, "job", "$1", "job_name", "(.*)")) by (namespace,owner_kind,owner_name,job)`
+	replicationControllerGroupClause = ` * on (namespace,pod) group_left (replicationcontroller) max(label_replace(kube_pod_owner{owner_kind="ReplicationController",owner_is_controller="true"}, "replicationcontroller", "$1", "owner_name", "(.*)")) by (namespace,replicationcontroller,pod) * on (namespace,replicationcontroller) group_left (owner_kind,owner_name) max(` + replicationControllerOwnerSelector + `) by (namespace,owner_kind,owner_name,replicationcontroller)`
 )
 
 func buildGroupClauses(subject string) map[string]*queryProcessorBuilder {
 	useSuffix := subject == common.Metric
-	groupClauses := make(map[string]*queryProcessorBuilder, 4)
+	groupClauses := make(map[string]*queryProcessorBuilder, 5)
 	buildGroupClause(groupClauses, false, unownedGroupClause, useSuffix)
 	buildGroupClause(groupClauses, true, directlyOwnedGroupClause, useSuffix)
 	if len(detectedOwnershipTypes[common.ReplicaSet]) > 0 {
@@ -1062,6 +1096,12 @@ func buildGroupClauses(subject string) map[string]*queryProcessorBuilder {
 	}
 	if len(detectedOwnershipTypes[common.Job]) > 0 {
 		buildGroupClause(groupClauses, true, jobGroupClause, useSuffix)
+	}
+	for _, owners := range detectedOwnershipTypes[common.ReplicationController] {
+		if len(owners) > 0 {
+			buildGroupClause(groupClauses, true, replicationControllerGroupClause, useSuffix)
+			break
+		}
 	}
 	return groupClauses
 }

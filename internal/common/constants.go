@@ -148,10 +148,11 @@ var (
 	StatefulSetOwner           = CamelCase(Stateful, Set)
 	ReplicationControllerOwner = CamelCase(Replication, Controller)
 	CronJobOwner               = CamelCase(Cron, Job)
-	ConfigMapOwner             = CamelCase(ConfigSt, Map)   // openshift
-	CatalogSourceOwner         = CamelCase(Catalog, Source) // openshift / Operator Framework
-	RolloutOwner               = CamelCase(Rollout)         // Argo
-	AnalysisRunOwner           = CamelCase(Analysis, Run)   // Argo
+	ConfigMapOwner             = CamelCase(ConfigSt, Map)        // openshift
+	CatalogSourceOwner         = CamelCase(Catalog, Source)      // openshift / Operator Framework
+	DeploymentConfigOwner      = CamelCase(Deployment, ConfigSt) // openshift
+	RolloutOwner               = CamelCase(Rollout)              // Argo
+	AnalysisRunOwner           = CamelCase(Analysis, Run)        // Argo
 )
 
 // these are practically constants but as they use functions they need to be vars
@@ -180,6 +181,7 @@ var (
 	DaemonSet             = strings.ToLower(DaemonSetOwner)
 	StatefulSet           = strings.ToLower(StatefulSetOwner)
 	ReplicationController = strings.ToLower(ReplicationControllerOwner)
+	DeploymentConfig      = strings.ToLower(DeploymentConfigOwner)
 	CronJob               = strings.ToLower(CronJobOwner)
 	AnalysisRun           = strings.ToLower(AnalysisRunOwner)
 	Replicas              = Plural(Replica)
