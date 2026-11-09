@@ -159,12 +159,7 @@ jobs:
           repositories: helm-charts
 
       - name: Open helm-charts PR to update the data collection image tag
-        if: >-
-          !cancelled() &&
-          steps.extract_tag.outputs.is_official == 'true' &&
-          steps.build.outcome == 'success' &&
-          steps.trivy_scan.outcome == 'success' &&
-          steps.scout_scan.outcome == 'success'
+        if: ${{ !cancelled() && steps.app_token.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
           APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
