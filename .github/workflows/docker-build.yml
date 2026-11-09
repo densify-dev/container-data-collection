@@ -66,6 +66,7 @@ jobs:
             type=raw,value=alpine-${{ steps.extract_tag.outputs.tag }}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -98,6 +99,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Trivy vulnerability scanner (table output)
+        id: trivy_scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
@@ -108,6 +110,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Run Docker Scout vulnerability scanner
+        id: scout_scan
         uses: docker/scout-action@v1.24.0
         with:
           command: 'cves'
@@ -136,3 +139,32 @@ jobs:
           name: 'sbom-${{ steps.extract_tag.outputs.tag }}'
           path: 'sbom.cyclonedx.json'
           retention-days: 90
+
+      # The helm-charts steps below run only for an official release whose
+      # image was built and pushed and passed both the Trivy and Docker Scout
+      # gates. They run even if a later step (e.g. SBOM) fails.
+      - name: Generate helm-charts app token
+        id: app_token
+        if: >-
+          !cancelled() &&
+          steps.extract_tag.outputs.is_official == 'true' &&
+          steps.build.outcome == 'success' &&
+          steps.trivy_scan.outcome == 'success' &&
+          steps.scout_scan.outcome == 'success'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.KUBEXAUTOMATION_APP_ID }}
+          private-key: ${{ secrets.KUBEXAUTOMATION_APP_PRIVATE_KEY }}
+          owner: densify-dev
+          repositories: helm-charts
+
+      - name: Open helm-charts PR to update the data collection image tag
+        if: ${{ !cancelled() && steps.app_token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
+          TAG: ${{ steps.extract_tag.outputs.tag }}
+          MAJOR_VERSION: ${{ steps.extract_tag.outputs.major_version }}
+          CHARTS_REPO: densify-dev/helm-charts
+          CHART_DIR: charts/container-optimization-data-forwarder
+        run: ./.github/scripts/update-helm-chart-tag.sh
