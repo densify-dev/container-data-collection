@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -46,11 +46,17 @@ jobs:
         id: get_sha
         run: echo "sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
+      - name: Set up Docker with the containerd image store
+        uses: docker/setup-docker-action@v5.7.0
+        with:
+          daemon-config: '{"features":{"containerd-snapshotter":true}}'
+          set-host: true
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -58,21 +64,21 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
             type=raw,value=alpine-${{ steps.extract_tag.outputs.tag }}
 
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v6
+      - name: Build and load Docker image locally
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
+          load: true
+          provenance: mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:alpine-${{ steps.extract_tag.outputs.tag }}
@@ -85,56 +91,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+      - name: Save each platform for scanning
+        id: save
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}
+        run: |
+          for arch in amd64 arm64; do
+            docker image save --platform "linux/$arch" --output "$RUNNER_TEMP/$arch.tar" "$IMAGE"
+          done
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-results.sarif') != ''
+      - name: Scan linux/amd64 with Trivy and Docker Scout
+        uses: ./.github/actions/scan-image
         with:
-          sarif_file: 'trivy-results.sarif'
+          arch: amd64
 
-      - name: Run Trivy vulnerability scanner (table output)
-        id: trivy_scan
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Scan linux/arm64 with Trivy and Docker Scout
+        if: ${{ !cancelled() && steps.save.outcome == 'success' }}
+        uses: ./.github/actions/scan-image
         with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          arch: arm64
 
-      - name: Run Docker Scout vulnerability scanner
-        id: scout_scan
-        uses: docker/scout-action@v1.24.0
-        with:
-          command: 'cves'
-          image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
-          only-severities: 'critical,high'
-          exit-code: true
-          only-fixed: true
-          sarif-file: 'docker-scout-results.sarif'
-
-      - name: Upload Docker Scout scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('docker-scout-results.sarif') != ''
-        with:
-          sarif_file: 'docker-scout-results.sarif'
+      - name: Push scanned Docker image
+        id: push
+        # The fresh Docker daemon has only the release tags built above for this repository.
+        run: docker image push --all-tags "$REGISTRY/$IMAGE_NAME"
 
       - name: Generate SBOM with Syft
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@v0.24.3
         with:
           image: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.extract_tag.outputs.tag }}'
           format: cyclonedx-json
           output-file: 'sbom.cyclonedx.json'
 
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: 'sbom-${{ steps.extract_tag.outputs.tag }}'
           path: 'sbom.cyclonedx.json'
@@ -148,10 +138,8 @@ jobs:
         if: >-
           !cancelled() &&
           steps.extract_tag.outputs.is_official == 'true' &&
-          steps.build.outcome == 'success' &&
-          steps.trivy_scan.outcome == 'success' &&
-          steps.scout_scan.outcome == 'success'
-        uses: actions/create-github-app-token@v2
+          steps.push.outcome == 'success'
+        uses: actions/create-github-app-token@v3.4.0
         with:
           app-id: ${{ secrets.KUBEXAUTOMATION_APP_ID }}
           private-key: ${{ secrets.KUBEXAUTOMATION_APP_PRIVATE_KEY }}
