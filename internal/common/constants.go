@@ -203,6 +203,7 @@ var (
 	StandardInit          = CamelCase(standard, initSt)
 	NativeSidecar         = CamelCase(native, sidecar, initSt)
 	OverTimeSuffix        = AggOverTime("a")[1:] // "a" required to get leading '_'
+	hostname              = strings.ToLower(Hostname)
 )
 
 // GPU consts and vars

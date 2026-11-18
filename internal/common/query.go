@@ -183,7 +183,8 @@ func FormatRepeatedAuto(format string, v any, other ...any) string {
 }
 
 func DcgmExporterLabelReplace(query string) string {
-	return LabelReplace(query, Node, Hostname, Always)
+	// DCGM exporter 4.6.0 renamed Hostname to hostname; prefer the new label when both exist.
+	return LabelReplace(LabelReplace(query, Node, Hostname, HasValue), Node, hostname, HasValue)
 }
 
 // ExportedLabelsReplace maps the workload identity back onto the namespace, pod and container labels.
