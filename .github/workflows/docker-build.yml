@@ -100,13 +100,27 @@ jobs:
             docker image save --platform "linux/$arch" --output "$RUNNER_TEMP/$arch.tar" "$IMAGE"
           done
 
+      - name: Install Docker Scout CLI
+        id: scout_install
+        run: |
+          # Use the direct release URL to avoid the action's anonymous GitHub API download.
+          archive="$RUNNER_TEMP/docker-scout.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$archive" \
+            https://github.com/docker/scout-cli/releases/download/v1.29.0/docker-scout_1.29.0_linux_amd64.tar.gz
+          printf '%s  %s\n' '9157cdc9372b478a8cd51dd53f5e9c74a7e34056ea291c65520bf76016fa72f4' "$archive" | sha256sum --check
+          plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+          mkdir -p "$plugins"
+          tar -xzf "$archive" -C "$plugins" docker-scout
+          docker scout version
+
       - name: Scan linux/amd64 with Trivy and Docker Scout
         uses: ./.github/actions/scan-image
         with:
           arch: amd64
 
       - name: Scan linux/arm64 with Trivy and Docker Scout
-        if: ${{ !cancelled() && steps.save.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.save.outcome == 'success' && steps.scout_install.outcome == 'success' }}
         uses: ./.github/actions/scan-image
         with:
           arch: arm64

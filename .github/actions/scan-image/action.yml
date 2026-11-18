@@ -35,14 +35,12 @@ runs:
 
     - name: Report Docker Scout vulnerabilities
       if: ${{ !cancelled() }}
-      uses: docker/scout-action@v1.29.0
-      with:
-        command: cves
-        image: archive://${{ runner.temp }}/${{ inputs.arch }}.tar
-        platform: linux/${{ inputs.arch }}
-        only-severities: 'critical,high'
-        exit-code: false
-        sarif-file: docker-scout-${{ inputs.arch }}.sarif
+      shell: bash
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: |
+        docker scout cves --platform "linux/$ARCH" --only-severity critical,high \
+          --format sarif --output "docker-scout-$ARCH.sarif" "archive://$RUNNER_TEMP/$ARCH.tar"
 
     - name: Upload Docker Scout SARIF
       if: ${{ !cancelled() && hashFiles(format('docker-scout-{0}.sarif', inputs.arch)) != '' }}
@@ -54,12 +52,9 @@ runs:
     # Trivy gates Alpine packages using advisories for the image's Alpine release.
     - name: Gate fixable Docker Scout Go findings
       if: ${{ !cancelled() }}
-      uses: docker/scout-action@v1.29.0
-      with:
-        command: cves
-        image: archive://${{ runner.temp }}/${{ inputs.arch }}.tar
-        platform: linux/${{ inputs.arch }}
-        only-package-types: golang
-        only-severities: 'critical,high'
-        only-fixed: true
-        exit-code: true
+      shell: bash
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: |
+        docker scout cves --platform "linux/$ARCH" --only-package-type golang \
+          --only-severity critical,high --only-fixed --exit-code "archive://$RUNNER_TEMP/$ARCH.tar"
