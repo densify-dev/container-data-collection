@@ -6,11 +6,11 @@ This repository includes a GitHub Actions workflow that automatically builds and
 
 The workflow is triggered when you create a new tag in the repository. It will:
 
-1. Build Docker images for both `linux/amd64` and `linux/arm64` platforms
-2. Push the images to Docker Hub with tags based on the type of release
-3. Scan the built container for security vulnerabilities using Trivy
-4. Upload security scan results to GitHub Security tab
-5. Fail the build if critical or high severity vulnerabilities are found
+1. Build and load one multi-platform image locally for `linux/amd64` and `linux/arm64`
+2. Scan each platform locally with Trivy and Docker Scout
+3. Upload separate security reports for each platform to GitHub Security
+4. Block publishing if either platform fails a scan gate
+5. Push the scanned image to Docker Hub with tags based on the type of release
 6. Generate Software Bill of Materials (SBOM) using Syft in CycloneDX JSON format
 7. Upload SBOM as a downloadable artifact
 
@@ -108,26 +108,31 @@ The workflow automatically sets the following build arguments:
 
 ### Security Scanning
 
-The workflow includes Trivy vulnerability scanning with two scan steps:
+The workflow runs both scanners on a local image archive for each platform before pushing.
+
+Trivy runs two scans per platform:
 
 ### 1. SARIF Upload
 - Scans the built container for all vulnerabilities
 - Uploads results to GitHub Security tab in SARIF format
-- Always runs, even if build fails
+- Uploads any report produced even if a scan gate fails
 - Provides detailed vulnerability information in GitHub's security interface
 
 ### 2. Build Gate
 - Scans for CRITICAL and HIGH severity vulnerabilities
 - Focuses on OS and library vulnerabilities
 - Ignores unfixed vulnerabilities (those without available patches)
-- **Fails the build** if critical or high severity vulnerabilities are found
+- **Blocks the push** if fixable critical or high severity vulnerabilities are found
 - Shows results in table format in the action logs
+
+Docker Scout reports high and critical findings for all packages, including Alpine, in SARIF.
+Scout blocks only fixable Go findings. Trivy gates Alpine packages using advisories for the image's Alpine release.
 
 ### Viewing Security Results
 
 1. **GitHub Security Tab**: Go to your repository → Security → Code scanning alerts
 2. **Action Logs**: Check the workflow run logs for the table output
-3. **Build Status**: The workflow will fail if high/critical vulnerabilities are found
+3. **Build Status**: A failed scan gate on either platform prevents all release tags from being pushed
 
 ### Software Bill of Materials (SBOM)
 
