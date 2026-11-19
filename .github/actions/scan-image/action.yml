@@ -1,0 +1,60 @@
+name: Scan release image platform
+description: Report and gate vulnerabilities in a locally saved image platform
+inputs:
+  arch:
+    description: Architecture of the image archive in runner.temp
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Report Trivy vulnerabilities
+      if: ${{ !cancelled() }}
+      uses: aquasecurity/trivy-action@v0.36.0
+      with:
+        input: ${{ runner.temp }}/${{ inputs.arch }}.tar
+        format: sarif
+        output: trivy-${{ inputs.arch }}.sarif
+
+    - name: Upload Trivy SARIF
+      if: ${{ !cancelled() && hashFiles(format('trivy-{0}.sarif', inputs.arch)) != '' }}
+      uses: github/codeql-action/upload-sarif@v4.39.3
+      with:
+        sarif_file: trivy-${{ inputs.arch }}.sarif
+        category: trivy-${{ inputs.arch }}
+
+    - name: Gate fixable Trivy findings
+      if: ${{ !cancelled() }}
+      uses: aquasecurity/trivy-action@v0.36.0
+      with:
+        input: ${{ runner.temp }}/${{ inputs.arch }}.tar
+        format: table
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Report Docker Scout vulnerabilities
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: |
+        docker scout cves --platform "linux/$ARCH" --only-severity critical,high \
+          --format sarif --output "docker-scout-$ARCH.sarif" "archive://$RUNNER_TEMP/$ARCH.tar"
+
+    - name: Upload Docker Scout SARIF
+      if: ${{ !cancelled() && hashFiles(format('docker-scout-{0}.sarif', inputs.arch)) != '' }}
+      uses: github/codeql-action/upload-sarif@v4.39.3
+      with:
+        sarif_file: docker-scout-${{ inputs.arch }}.sarif
+        category: docker-scout-${{ inputs.arch }}
+
+    # Trivy gates Alpine packages using advisories for the image's Alpine release.
+    - name: Gate fixable Docker Scout Go findings
+      if: ${{ !cancelled() }}
+      shell: bash
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: |
+        docker scout cves --platform "linux/$ARCH" --only-package-type golang \
+          --only-severity critical,high --only-fixed --exit-code "archive://$RUNNER_TEMP/$ARCH.tar"
