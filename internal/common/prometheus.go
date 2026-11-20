@@ -501,10 +501,10 @@ func adjustIntervalsForFunction(cluster string, query string, ifn intervalFuncti
 		body := query[bodyStart:bodyEnd]
 		if j, k := intervalInFunctionBody(body); j > -1 {
 			mName := metricNameFromExpression(body[:j])
-			if mName == Empty {
-				mName = metricNameBeforeRange(body, j)
+			scrapeInterval := defaultScrapeInterval
+			if mName != Empty {
+				scrapeInterval = getScrapeInterval(cluster, mName)
 			}
-			scrapeInterval := getScrapeInterval(cluster, mName)
 			if interval, changed := adjustedInterval(ifn, scrapeInterval, body[j+1:k]); changed {
 				b.WriteString(body[:j+1])
 				b.WriteString(interval)
@@ -636,61 +636,53 @@ func matchingRightParen(query string, left int) int {
 }
 
 func metricNameFromExpression(expr string) string {
-	if j := firstRangeStart(expr); j > -1 {
-		return metricNameBeforeRange(expr, j)
-	}
-	return Empty
-}
-
-func firstRangeStart(expr string) int {
-	inString := false
-	for i := 0; i < len(expr); i++ {
-		c := expr[i]
-		if c == '\\' && inString {
+	// A subquery may wrap selectors in functions, aggregation, and arithmetic.
+	for i := 0; i < len(expr); {
+		if expr[i] == leftBrace[0] {
+			return Empty
+		}
+		if expr[i] == '"' || expr[i] == '\'' || expr[i] == '`' {
+			quote := expr[i]
+			i++
+			for i < len(expr) {
+				c := expr[i]
+				i++
+				if c == '\\' && quote != '`' && i < len(expr) {
+					i++
+				} else if c == quote {
+					break
+				}
+			}
+			continue
+		}
+		if !isPromFunctionNameChar(expr[i]) {
 			i++
 			continue
 		}
-		if c == DoubleQuote[0] {
-			inString = !inString
+		start := i
+		for i < len(expr) && isPromFunctionNameChar(expr[i]) {
+			i++
+		}
+		name := expr[start:i]
+		if name[0] >= '0' && name[0] <= '9' {
 			continue
 		}
-		if !inString && c == leftSquareBracket[0] {
-			return i
-		}
-	}
-	return -1
-}
-
-func metricNameBeforeRange(expr string, rangeStart int) string {
-	s := strings.TrimSpace(expr[:rangeStart])
-	if strings.HasSuffix(s, rightBrace) {
-		inString := false
-		selectorStart := -1
-		for i := 0; i < len(s); i++ {
-			c := s[i]
-			if c == '\\' && inString {
-				i++
-				continue
+		rest := strings.TrimLeft(expr[i:], " \t\n\r")
+		if strings.HasPrefix(rest, leftBracket) {
+			if name == "by" || name == "without" {
+				left := len(expr) - len(rest)
+				if right := matchingRightParen(expr, left); right > -1 {
+					i = right + 1
+				}
 			}
-			if c == DoubleQuote[0] {
-				inString = !inString
-				continue
-			}
-			if !inString && c == leftBrace[0] {
-				selectorStart = i
-			}
+			continue
 		}
-		if selectorStart > -1 {
-			s = s[:selectorStart]
+		if strings.HasPrefix(rest, "by") || strings.HasPrefix(rest, "without") {
+			continue
 		}
+		return name
 	}
-	if i := strings.LastIndexAny(s, " \t(,+-*/%^:"); i > -1 {
-		s = s[i+1:]
-	}
-	if i := strings.Index(s, leftBrace); i > -1 {
-		s = s[:i]
-	}
-	return strings.TrimSpace(s)
+	return Empty
 }
 
 func isPromFunctionNameChar(c byte) bool {
