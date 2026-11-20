@@ -486,7 +486,7 @@ var (
 	scaleTargetRef = common.JoinNoSep(scale, target, ref)
 	strKind        = common.SnakeCase(scaleTargetRef, common.Kind)
 	strName        = common.SnakeCase(scaleTargetRef, common.Name)
-	hpaTargets     = []string{common.Deployment, common.StatefulSet, common.ReplicaSet, common.ReplicationController, common.Rollout}
+	hpaTargets     = []string{common.Deployment, common.StatefulSet, common.ReplicaSet, common.ReplicationController, common.Rollout, common.DeploymentConfig}
 )
 
 func makeHpaWorkload() [][]model.SamplePair {

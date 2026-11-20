@@ -269,3 +269,24 @@ func TestDeploymentConfigAttributesAndReplicationControllerOwnerSizes(t *testing
 		}
 	}
 }
+
+func TestDeploymentConfigHPATargetFallback(t *testing.T) {
+	isolateOwnerships(t)
+	const cluster, ns, name = "deploymentconfig-hpa-fallback", "app", "workload"
+	t.Cleanup(func() {
+		delete(objectHpas, cluster)
+		delete(unclassifiedHpas, cluster)
+	})
+	pth.getOwners(cluster, model.Matrix{ownershipSample(ns, "pod", "pod", "ReplicationController", "rc")})
+	rcth.getOwners(cluster, model.Matrix{ownershipSample(ns, "replicationcontroller", "rc", "DeploymentConfig", name)})
+	addContainerAndOwners(cluster, model.Matrix{containerSample(ns, "pod")})
+	obj := namespaces[cluster][ns].objects[key(common.DeploymentConfig, name, ns)]
+
+	hpath.getHpaMetricString(cluster, model.Matrix{{Metric: model.Metric{
+		"namespace": ns, model.LabelName(hpath.getTypeLabelName()): name, "label_app": "example",
+	}}})
+	h := objectHpas[cluster][ns][name]
+	if h == nil || h.obj != obj || obj.hpa != h || h.labels["label_app"] != "example" {
+		t.Fatal("same-named HPA was not classified and attached to its DeploymentConfig")
+	}
+}
