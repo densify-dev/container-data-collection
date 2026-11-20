@@ -429,21 +429,13 @@ func (omh *objectMetricHolder) getObjectMetric(cluster string, result model.Matr
 	}
 }
 
-type ownedObjectMetricHolder struct {
-	*objectMetricHolder
-}
-
-func (oomh *ownedObjectMetricHolder) getObjectMetric(cluster string, result model.Matrix) {
-	for _, omh := range oomh.getOwnerObjectMetricHolders(cluster) {
-		omh.getObjectMetric(cluster, result)
+func (omh *objectMetricHolder) getObjectMetricByOwnerKind(cluster string, result model.Matrix) {
+	for _, ss := range result {
+		if kind, ok := common.GetLabelValue(ss, ownerKind); ok && kind != common.Empty {
+			owner := &objectMetricHolder{omh.metricHolder, &typeHolder{typeName: strings.ToLower(kind), typeLabel: ownerName}}
+			owner.getObjectMetric(cluster, model.Matrix{ss})
+		}
 	}
-}
-
-func (oomh *ownedObjectMetricHolder) getOwnerObjectMetricHolders(cluster string) (omhs []*objectMetricHolder) {
-	for ownerType := range detectedOwnershipTypes[oomh.typeName][cluster] {
-		omhs = append(omhs, &objectMetricHolder{oomh.metricHolder, &typeHolder{typeName: ownerType, typeLabel: ownerName}})
-	}
-	return
 }
 
 type hpaMetricHolder struct {

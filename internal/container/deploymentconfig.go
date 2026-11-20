@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	replicationControllerOwnerMetric   = "kube_replicationcontroller_owner"
-	replicationControllerOwnerSelector = replicationControllerOwnerMetric + `{owner_is_controller="true",owner_kind!="",owner_name!="",owner_name!="<none>"}`
-	noReplicationControllerOwners      = "no-replicationcontroller-owners"
+	replicationControllerOwnerMetric    = "kube_replicationcontroller_owner"
+	replicationControllerOwnerSelector  = replicationControllerOwnerMetric + `{owner_is_controller="true",owner_kind!="",owner_name!="",owner_name!="<none>"}`
+	replicationControllerOwnerSizeQuery = `max(max(kube_replicationcontroller_spec_replicas{}) by (namespace,replicationcontroller) * on (namespace,replicationcontroller) group_right max(` + replicationControllerOwnerSelector + `) by (namespace,replicationcontroller,owner_kind,owner_name)) by (namespace,owner_kind,owner_name)`
+	noReplicationControllerOwners       = "no-replicationcontroller-owners"
 )
 
 func excludeReplicationControllerQueries(cluster, query string) bool {

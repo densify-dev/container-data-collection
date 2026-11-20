@@ -743,17 +743,14 @@ func Metrics() {
 	common.DebugLogObjectMemStats(common.CurrentSizeName)
 	mh.metric = common.CurrentSizeName
 	omh.typeHolder = rsth
-	oomh := &ownedObjectMetricHolder{objectMetricHolder: omh}
 	query = `kube_replicaset_spec_replicas{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	query = `max(max(kube_replicaset_spec_replicas{}) by (namespace,replicaset) * on (namespace,replicaset) group_right max(kube_replicaset_owner{}) by (namespace, replicaset, owner_name)) by (owner_name, namespace)`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
+	query = `max(max(kube_replicaset_spec_replicas{}) by (namespace,replicaset) * on (namespace,replicaset) group_right max(kube_replicaset_owner{}) by (namespace, replicaset, owner_kind, owner_name)) by (namespace, owner_kind, owner_name)`
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetricByOwnerKind)
 	omh.typeHolder = rcth
 	query = `kube_replicationcontroller_spec_replicas{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	omh.typeHolder = dcth
-	query = `max(openshift_deploymentconfig_spec_replicas{}) by (namespace, deploymentconfig)`
-	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
+	_, _ = common.CollectAndProcessMetric(replicationControllerOwnerSizeQuery, range5Min, omh.getObjectMetricByOwnerKind)
 	omh.typeHolder = dsth
 	query = `kube_daemonset_status_number_available{}`
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
@@ -764,8 +761,8 @@ func Metrics() {
 	jczsq := fmt.Sprintf("max_over_time(kube_job_spec_parallelism{}[%dm]) and (max_over_time(kube_job_status_active{}[%dm]) == 1)", common.Params.Collection.SampleRate, common.Params.Collection.SampleRate)
 	query = jczsq
 	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetric)
-	query = fmt.Sprintf("max(max(%s) by (namespace,job_name) * on (namespace,job_name) group_right max(kube_job_owner{}) by (namespace, job_name, owner_name)) by (owner_name, namespace)", jczsq)
-	_, _ = common.CollectAndProcessMetric(query, range5Min, oomh.getObjectMetric)
+	query = fmt.Sprintf("max(max(%s) by (namespace,job_name) * on (namespace,job_name) group_right max(kube_job_owner{}) by (namespace, job_name, owner_kind, owner_name)) by (namespace, owner_kind, owner_name)", jczsq)
+	_, _ = common.CollectAndProcessMetric(query, range5Min, omh.getObjectMetricByOwnerKind)
 
 	containerWorkloadWriters.CloseAndClearWorkloadWriters(common.ContainerEntityKind)
 	clear(written)

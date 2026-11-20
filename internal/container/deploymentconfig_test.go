@@ -107,10 +107,12 @@ func TestReplicationControllerQueryGates(t *testing.T) {
 		"empty": {}, "dc": {common.DeploymentConfig: true}, "other": {"othercontroller": true},
 	}
 	for _, cluster := range []string{"missing", "empty", "dc", "other"} {
-		if got := excludeReplicationControllerQueries(cluster, replicationControllerGroupClause); got != (cluster == "missing" || cluster == "empty") {
-			t.Errorf("RC query exclusion for %s = %v", cluster, got)
+		for _, query := range []string{replicationControllerGroupClause, replicationControllerOwnerSizeQuery} {
+			if got := excludeReplicationControllerQueries(cluster, query); got != (cluster == "missing" || cluster == "empty") {
+				t.Errorf("RC query exclusion for %s = %v: %s", cluster, got, query)
+			}
 		}
-		for _, metric := range []string{"labels", "created", "metadata_generation", "spec_replicas", "spec_strategy_rollingupdate_max_surge", "spec_strategy_rollingupdate_max_unavailable"} {
+		for _, metric := range []string{"labels", "created", "metadata_generation", "spec_strategy_rollingupdate_max_surge", "spec_strategy_rollingupdate_max_unavailable"} {
 			if got := excludeReplicationControllerQueries(cluster, "openshift_deploymentconfig_"+metric+"{}"); got != (cluster != "dc") {
 				t.Errorf("DC %s query exclusion for %s = %v", metric, cluster, got)
 			}
@@ -181,7 +183,7 @@ func TestReplicationControllerRediscoveryAndMalformedOwners(t *testing.T) {
 	}
 }
 
-func TestDeploymentConfigAttributesAndCurrentSize(t *testing.T) {
+func TestDeploymentConfigAttributesAndReplicationControllerOwnerSizes(t *testing.T) {
 	isolateOwnerships(t)
 	t.Chdir(t.TempDir())
 	const cluster, ns = "cluster", "app"
@@ -197,11 +199,18 @@ func TestDeploymentConfigAttributesAndCurrentSize(t *testing.T) {
 	})
 	pth.getOwners(cluster, model.Matrix{
 		ownershipSample(ns, "pod", "pod", "ReplicationController", "rc"),
+		ownershipSample(ns, "pod", "other-pod", "ReplicationController", "other"),
 		ownershipSample(ns, "pod", "standalone-pod", "ReplicationController", "standalone"),
 	})
-	rcth.getOwners(cluster, model.Matrix{ownershipSample(ns, "replicationcontroller", "rc", "DeploymentConfig", "dc")})
-	addContainerAndOwners(cluster, model.Matrix{containerSample(ns, "pod"), containerSample(ns, "standalone-pod")})
-	obj := namespaces[cluster][ns].objects[key(common.DeploymentConfig, "dc", ns)]
+	rcth.getOwners(cluster, model.Matrix{
+		ownershipSample(ns, "replicationcontroller", "rc", "DeploymentConfig", "dc"),
+		ownershipSample(ns, "replicationcontroller", "other", "OtherController", "dc"),
+	})
+	addContainerAndOwners(cluster, model.Matrix{containerSample(ns, "pod"), containerSample(ns, "other-pod"), containerSample(ns, "standalone-pod")})
+	objects := namespaces[cluster][ns].objects
+	obj := objects[key(common.DeploymentConfig, "dc", ns)]
+	other := objects[key("othercontroller", "dc", ns)]
+	standalone := objects[key(common.ReplicationController, "standalone", ns)]
 	if obj.currentSize != common.UnknownValue || len(obj.labelMap) != 0 || !obj.createTime.IsZero() {
 		t.Fatal("missing OSM metrics fabricated attributes")
 	}
@@ -237,21 +246,26 @@ func TestDeploymentConfigAttributesAndCurrentSize(t *testing.T) {
 	}
 	rcSample.Metric["replicationcontroller"] = "standalone"
 	omh.getObjectMetric(cluster, model.Matrix{rcSample})
-	if !namespaces[cluster][ns].objects[key(common.ReplicationController, "standalone", ns)].createTime.Equal(time.Unix(99, 0)) {
+	if !standalone.createTime.Equal(time.Unix(99, 0)) {
 		t.Fatal("standalone RC creation timestamp not collected")
 	}
 	omh.metric = common.CurrentSizeName
+	omh.getObjectMetric(cluster, model.Matrix{rcSample})
 	rcSample.Metric["replicationcontroller"] = "rc"
 	omh.getObjectMetric(cluster, model.Matrix{rcSample})
 	if obj.currentSize != common.UnknownValue {
 		t.Fatal("owned RC replica count assigned to DC")
 	}
-	omh.typeHolder = dcth
-	for _, size := range []model.SampleValue{3, 0} {
-		sample.Values[0].Value = size
-		omh.getObjectMetric(cluster, model.Matrix{sample})
-		if obj.currentSize != int(size) {
-			t.Fatalf("DC current size = %d, want %v", obj.currentSize, size)
+	omh.getObjectMetricByOwnerKind(cluster, model.Matrix{
+		{Metric: model.Metric{"namespace": ns, "owner_kind": "DeploymentConfig", "owner_name": "dc"}, Values: []model.SamplePair{{Value: 3}}},
+		{Metric: model.Metric{"namespace": ns, "owner_kind": "OtherController", "owner_name": "dc"}, Values: []model.SamplePair{{Value: 0}}},
+	})
+	for _, want := range []struct {
+		obj  *k8sObject
+		size int
+	}{{obj, 3}, {other, 0}, {standalone, 99}} {
+		if want.obj.currentSize != want.size {
+			t.Errorf("%s current size = %d, want %d", want.obj.objectId, want.obj.currentSize, want.size)
 		}
 	}
 }
