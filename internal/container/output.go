@@ -332,7 +332,7 @@ var ownerLabelValues = []string{common.PodOwner, common.DeploymentOwner, common.
 	common.ReplicationControllerOwner, common.CronJobOwner, common.ConfigMapOwner,
 	// Well-known CRDs
 	// - Operator Framework / OpenShift
-	common.CatalogSourceOwner,
+	common.DeploymentConfigOwner, common.CatalogSourceOwner,
 	// - Argo
 	common.RolloutOwner, common.AnalysisRunOwner,
 }
